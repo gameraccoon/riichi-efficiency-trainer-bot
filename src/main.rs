@@ -25,6 +25,8 @@ struct Tile {
     value: u8,
 }
 
+const EMPTY_TILE : Tile = Tile{suit: Suit::Special, value: 0};
+
 type HandTiles = [Tile; 14];
 type DeadWall = [Tile; 14];
 
@@ -87,6 +89,16 @@ fn get_printable_suit(suit: Suit) -> &'static str {
     }
 }
 
+fn get_suit_from_letter(suit_letter: char) -> Option<Suit> {
+    match suit_letter {
+        'm' => Some(Suit::Man),
+        'p' => Some(Suit::Pin),
+        's' => Some(Suit::Sou),
+        'z' => Some(Suit::Special),
+        _ => None,
+    }
+}
+
 fn get_printable_tiles_set(tiles: &[Tile]) -> String {
     let mut result: String = "".to_string();
 
@@ -112,7 +124,7 @@ fn get_printable_tiles_set(tiles: &[Tile]) -> String {
 }
 
 fn sort_hand(hand: &mut Hand) {
-    if hand.tiles[13].suit == Suit::Special && hand.tiles[13].value == 0 {
+    if hand.tiles[13] == EMPTY_TILE {
         hand.tiles[0..13].sort();
     }
     else {
@@ -161,7 +173,7 @@ fn generate_normal_dealed_game(player_count: u32) -> GameState {
     let mut hands = Vec::with_capacity(player_count as usize);
     let mut discards = Vec::with_capacity(player_count as usize);
     for i in 0..player_count {
-        let new_tiles = [tiles.split_off(tiles.len() - 13), [Tile{suit: Suit::Special, value: 0}].to_vec()].concat();
+        let new_tiles = [tiles.split_off(tiles.len() - 13), [EMPTY_TILE].to_vec()].concat();
         hands.push(Hand{tiles: new_tiles.try_into().unwrap()});
         sort_hand(&mut hands[i as usize]);
         discards.push(Vec::new());
@@ -286,12 +298,12 @@ fn calculate_shanten(tiles: &[Tile]) -> i32 {
 }
 
 fn calculate_hand_shanten(hand: &Hand) -> i32 {
-    assert!(hand.tiles[13] == Tile{suit: Suit::Special, value: 0}, "Shanten calculation alghorithm is expected to be called on 13 tiles");
+    assert!(hand.tiles[13] == EMPTY_TILE, "Shanten calculation alghorithm is expected to be called on 13 tiles");
     return calculate_shanten(&hand.tiles[0..13]);
 }
 
 fn calculate_hand_shanten_14_tiles(hand: &Hand) -> i32 {
-    assert!(hand.tiles[13] != Tile{suit: Suit::Special, value: 0}, "14 tiles shanten calculation alghorithm is expected to be called on 14 tiles");
+    assert!(hand.tiles[13] != EMPTY_TILE, "14 tiles shanten calculation alghorithm is expected to be called on 14 tiles");
     let mut minimal_shanten = 8;
     let mut hand_table: HandFrequencyTable = make_frequency_table(&hand.tiles);
     for tile in hand.tiles {
@@ -305,34 +317,80 @@ fn calculate_hand_shanten_14_tiles(hand: &Hand) -> i32 {
 }
 
 fn draw_tile_to_hand(game: &mut GameState, hand_index: usize) {
-    game.hands[hand_index].tiles[13] = game.live_wall.split_off(game.live_wall.len() - 13)[0];
+    game.hands[hand_index].tiles[13] = game.live_wall.split_off(game.live_wall.len() - 1)[0];
 }
 
 fn discard_tile(game: &mut GameState, hand_index: usize, tile_index: usize) {
     game.discards[hand_index].push(game.hands[hand_index].tiles[tile_index]);
     game.hands[hand_index].tiles[tile_index..14].rotate_left(1);
-    game.hands[hand_index].tiles[13] = Tile{suit: Suit::Special, value: 0};
+    game.hands[hand_index].tiles[13] = EMPTY_TILE;
     // we sort in the tile that was added the last
     sort_hand(&mut game.hands[hand_index]);
 }
 
-fn main() {
-    let mut game = generate_normal_dealed_game(1);
+fn get_tile_from_input(input: &str) -> Tile {
+    if input.len() != 2 {
+        return EMPTY_TILE;
+    }
 
-    print_hand(&game.hands[0]);
-    print_hand_unicode(&game.hands[0]);
-    print_hand(&game.hands[0]);
-    print_hand_unicode(&game.hands[0]);
-    println!("Shanten: {}", calculate_hand_shanten(&game.hands[0]));
-    draw_tile_to_hand(&mut game, 0);
-    print_hand(&game.hands[0]);
-    print_hand_unicode(&game.hands[0]);
-    print_hand(&game.hands[0]);
-    print_hand_unicode(&game.hands[0]);
-    discard_tile(&mut game, 0, 0);
-    print_hand(&game.hands[0]);
-    print_hand_unicode(&game.hands[0]);
-    print_hand(&game.hands[0]);
-    print_hand_unicode(&game.hands[0]);
-    println!("Shanten: {}", calculate_hand_shanten(&game.hands[0]));
+    let suit = get_suit_from_letter(input.chars().nth(1).unwrap());
+    if suit.is_none() {
+        return EMPTY_TILE;
+    }
+
+    let value: u8 = input[0..1].parse().unwrap_or(255);
+    if value == 255 {
+        return EMPTY_TILE;
+    }
+
+    return Tile{suit:suit.unwrap(), value:value};
+}
+
+fn main() {
+    let mut should_quit_game = false;
+
+    while !should_quit_game {
+        let mut should_restart_game = false;
+        let mut game = generate_normal_dealed_game(1);
+
+        while !should_restart_game && !should_quit_game {
+            if game.hands[0].tiles[13] == EMPTY_TILE {
+                println!("Shanten: {}", calculate_hand_shanten(&game.hands[0]));
+
+                draw_tile_to_hand(&mut game, 0);
+                println!("Drawn {}{}", game.hands[0].tiles[13].value.to_string(), get_printable_suit(game.hands[0].tiles[13].suit));
+                println!("{} tiles left in the live wall", game.live_wall.len());
+            }
+
+            print_hand(&game.hands[0]);
+            print_hand_unicode(&game.hands[0]);
+            println!("Send tile to discard, e.g. \"1m\", \"n\" to start new hand, \"q\" to quit");
+
+            let mut input = String::new();
+            match std::io::stdin().read_line(&mut input) {
+                Ok(_input) => {},
+                Err(_err) => {},
+            }
+            input = input.trim().strip_suffix("\r\n").or(input.strip_suffix("\n")).unwrap_or(&input).to_string();
+
+            if input == "n" {
+                should_restart_game = true;
+                println!("Dealing a new hand");
+            }
+            else if input == "q" {
+                should_quit_game = true;
+                println!("Quitting");
+            }
+            else {
+                let requested_tile = get_tile_from_input(&input);
+                if requested_tile == EMPTY_TILE {
+                    println!("Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z'");
+                }
+                match game.hands[0].tiles.iter().position(|&r| r == requested_tile) {
+                    Some(tile_index_in_hand) => { discard_tile(&mut game, 0, tile_index_in_hand as usize); },
+                    None => { println!("Could not find the given tile in the hand"); },
+                }
+            }
+        }
+    }
 }
