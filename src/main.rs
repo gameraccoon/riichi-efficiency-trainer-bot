@@ -2,12 +2,12 @@ extern crate rand;
 
 use crate::rand::prelude::SliceRandom;
 use rand::thread_rng;
-use std::cmp;
 
-const TILE_UNICODE: [&str; 34] = [
-    "🀇", "🀈", "🀉", "🀊", "🀋", "🀌", "🀍", "🀎", "🀏",
-    "🀙", "🀚", "🀛", "🀜", "🀝", "🀞", "🀟", "🀠", "🀡",
-    "🀐", "🀑", "🀒", "🀓", "🀔", "🀕", "🀖", "🀗", "🀘",
+
+const TILE_UNICODE: [&str; 37] = [
+    "🀇", "🀈", "🀉", "🀊", "🀋", "🀌", "🀍", "🀎", "🀏", "err",
+    "🀙", "🀚", "🀛", "🀜", "🀝", "🀞", "🀟", "🀠", "🀡", "err",
+    "🀐", "🀑", "🀒", "🀓", "🀔", "🀕", "🀖", "🀗", "🀘", "err",
     "🀀", "🀁", "🀂", "🀃", "🀆", "🀅", "🀄"
 ];
 
@@ -46,7 +46,8 @@ struct GameState {
 }
 
 // store tiles as cumulative frequency distribution (store count of every possible tile in a hand)
-type HandFrequencyTable = [u8; 34];
+type HandFrequencyTable = [u8; 37];
+const EMPTY_FREQUENCY_TABLE: HandFrequencyTable = [0; 37];
 
 fn print_hand(hand: &Hand) {
     println!("{}", get_printable_tiles_set(&hand.tiles));
@@ -59,14 +60,22 @@ fn print_hand_unicode(hand: &Hand) {
 fn get_tile_index(tile: &Tile) -> usize {
     let shift = match tile.suit {
         Suit::Man => 0,
-        Suit::Pin => 9,
-        Suit::Sou => 18,
-        Suit::Special => 27,
+        Suit::Pin => 10,
+        Suit::Sou => 20,
+        Suit::Special => 30,
     };
 
     return (tile.value + shift - 1) as usize;
 }
 
+fn get_tile_from_index(index: usize) -> Tile {
+    return match index {
+        i if i < (10 as usize) => Tile{suit: Suit::Man, value: (index + 1) as u8},
+        i if i < (20 as usize) => Tile{suit: Suit::Pin, value: (index + 1 - 10) as u8},
+        i if i < (30 as usize) => Tile{suit: Suit::Sou, value: (index + 1 - 20) as u8},
+        _ => Tile{suit: Suit::Special, value: (index + 1 - 30) as u8},
+    }
+}
 
 fn get_printable_tiles_set_unicode(tiles: &[Tile]) -> String {
     let mut result: String = "".to_string();
@@ -118,7 +127,6 @@ fn get_printable_tiles_set(tiles: &[Tile]) -> String {
 
         result += &tile.value.to_string();
     }
-
 
     result += get_printable_suit(last_suit);
 
@@ -264,7 +272,7 @@ fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str) -> GameS
 }
 
 fn make_frequency_table(tiles: &[Tile]) -> HandFrequencyTable {
-    let mut result: HandFrequencyTable = [0; 34];
+    let mut result: HandFrequencyTable = EMPTY_FREQUENCY_TABLE;
 
     for tile in tiles {
         result[get_tile_index(tile)] += 1
@@ -273,128 +281,177 @@ fn make_frequency_table(tiles: &[Tile]) -> HandFrequencyTable {
     return result;
 }
 
-fn remove_potential_sets(hand_table: &mut HandFrequencyTable, best_shanten: &mut i32, complete_sets: &mut i32, partial_sets: &mut i32, pair: &mut i32, mut i: usize) {
-    // Skip to the next tile that exists in the hand
-    while i < hand_table.len() && hand_table[i] == 0 { i += 1; }
+fn convert_frequency_table_to_flat_vec(frequency_table: &HandFrequencyTable) -> Vec<Tile> {
+    let mut result = Vec::new();
 
-    if i >= hand_table.len() {
-        // We've checked everything. See if this shanten is better than the current best.
-        let current_shanten = 8 - (*complete_sets * 2) - *partial_sets - *pair;
-        if current_shanten < *best_shanten {
-            *best_shanten = current_shanten;
-        }
-        return;
-    }
-
-    // A standard hand will only ever have four groups plus a pair.
-    if *complete_sets + *partial_sets < 4 {
-        // Pair
-        if hand_table[i] == 2 {
-            *partial_sets += 1;
-            hand_table[i] -= 2;
-            remove_potential_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, i);
-            hand_table[i] += 2;
-            *partial_sets -= 1;
-        }
-
-        // Edge or Side wait protorun
-        if i < 30 && hand_table[i + 1] != 0 {
-            *partial_sets += 1;
-            hand_table[i] -= 1; hand_table[i + 1] -= 1;
-            remove_potential_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, i);
-            hand_table[i] += 1; hand_table[i + 1] += 1;
-            *partial_sets -= 1;
-        }
-
-        // Closed wait protorun
-        if i < 30 && i % 10 <= 8 && hand_table[i + 2] != 0 {
-            *partial_sets += 1;
-            hand_table[i] -= 1; hand_table[i + 2] -= 1;
-            remove_potential_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, i);
-            hand_table[i] += 1; hand_table[i + 2] += 1;
-            *partial_sets -= 1;
+    for i in 0..frequency_table.len() {
+        if frequency_table[i] > 0 {
+            let tile = get_tile_from_index(i);
+            result.push(tile);
         }
     }
 
-    // Check all alternative hand configurations
-    remove_potential_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, i + 1);
+    return result;
 }
 
-fn remove_completed_sets(hand_table: &mut HandFrequencyTable, best_shanten: &mut i32, complete_sets: &mut i32, partial_sets: &mut i32, pair: &mut i32, mut i: usize) {
-    // Skip to the next tile that exists in the hand.
-    while i < hand_table.len() && hand_table[i] == 0 { i += 1; }
-
-    if i >= hand_table.len() {
-        // We've gone through the whole hand, now check for partial sets.
-        remove_potential_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, 1);
-        return;
+fn append_frequency_table(target_table: &mut HandFrequencyTable, addition_table: &HandFrequencyTable) {
+    for i in 0..target_table.len() {
+        target_table[i] += addition_table[i];
     }
-
-    // Triplet
-    if hand_table[i] >= 3 {
-        *complete_sets += 1;
-        hand_table[i] -= 3;
-        remove_completed_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, i);
-        hand_table[i] += 3;
-        *complete_sets -= 1;
-    }
-
-    // Sequence
-    if i < 30 && hand_table[i + 1] != 0 && hand_table[i + 2] != 0 {
-        *complete_sets += 1;
-        hand_table[i] -= 1; hand_table[i + 1] -= 1; hand_table[i + 2] -= 1;
-        remove_completed_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, i);
-        hand_table[i] += 1; hand_table[i + 1] += 1; hand_table[i + 2] += 1;
-        *complete_sets -= 1;
-    }
-
-    // Check all alternative hand configurations
-    remove_completed_sets(hand_table, best_shanten, complete_sets, partial_sets, pair, i + 1);
 }
 
-fn calculate_shanten_on_table(hand_table: &mut HandFrequencyTable) -> i32 {
-    let mut complete_sets = 0;
-    let mut pair = 0;
-    let mut partial_sets = 0;
-    let mut best_shanten = 8;
+pub struct ShantenCalculator {
+    hand_table: HandFrequencyTable,
+    waits_table: HandFrequencyTable,
+    complete_sets: i8,
+    pair: i8,
+    partial_sets: i8,
+    best_shanten: i8,
+    best_waits: HandFrequencyTable,
+}
 
-    for i in 0..hand_table.len() {
-        if hand_table[i] >= 2 {
-            pair += 1;
-            hand_table[i] -= 2;
-            remove_completed_sets(hand_table, &mut best_shanten, &mut complete_sets, &mut partial_sets, &mut pair, 1);
-            hand_table[i] += 2;
-            pair -= 1;
+impl ShantenCalculator {
+    fn remove_potential_sets(&mut self, mut i: usize) {
+        // Skip to the next tile that exists in the hand
+        while i < self.hand_table.len() && self.hand_table[i] == 0 { i += 1; }
+
+        if i >= self.hand_table.len() {
+            // We've checked everything. See if this shanten is better than the current best.
+            let current_shanten = (8 - (self.complete_sets * 2) - self.partial_sets - self.pair) as i8;
+            if current_shanten < self.best_shanten {
+                self.best_shanten = current_shanten;
+                self.best_waits = self.waits_table.clone();
+                // append single tiles that was left, as uncompleted pairs
+                append_frequency_table(&mut self.best_waits, &self.hand_table);
+            }
+            else if current_shanten == self.best_shanten {
+                append_frequency_table(&mut self.best_waits, &self.waits_table);
+                // append single tiles that was left, as uncompleted pairs
+                append_frequency_table(&mut self.best_waits, &self.hand_table);
+            }
+            return;
         }
+
+        // A standard hand will only ever have four groups plus a pair.
+        if self.complete_sets + self.partial_sets < 4 {
+            // Pair
+            if self.hand_table[i] == 2 {
+                self.partial_sets += 1;
+                self.hand_table[i] -= 2;
+                self.waits_table[i] += 1;
+                self.remove_potential_sets(i);
+                self.waits_table[i] -= 1;
+                self.hand_table[i] += 2;
+                self.partial_sets -= 1;
+            }
+
+            // Edge or Side wait protorun
+            if i < 30 && self.hand_table[i + 1] != 0 {
+                let left_edge_wait = i % 10 == 0;
+                let right_edge_wait = i % 10 == 7;
+
+                self.partial_sets += 1;
+                self.hand_table[i] -= 1; self.hand_table[i + 1] -= 1;
+                if !left_edge_wait {
+                    self.waits_table[i - 1] += 1;
+                }
+                if !right_edge_wait {
+                    self.waits_table[i + 2] += 1;
+                }
+                self.remove_potential_sets(i);
+                if !left_edge_wait {
+                    self.waits_table[i - 1] -= 1;
+                }
+                if !right_edge_wait {
+                    self.waits_table[i + 2] -= 1;
+                }
+                self.hand_table[i] += 1; self.hand_table[i + 1] += 1;
+                self.partial_sets -= 1;
+            }
+
+            // Closed wait protorun
+            if i < 30 && i % 10 <= 8 && self.hand_table[i + 2] != 0 {
+                self.partial_sets += 1;
+                self.hand_table[i] -= 1; self.hand_table[i + 2] -= 1;
+                self.waits_table[i + 1] += 1;
+                self.remove_potential_sets(i);
+                self.waits_table[i + 1] -= 1;
+                self.hand_table[i] += 1; self.hand_table[i + 2] += 1;
+                self.partial_sets -= 1;
+            }
+        }
+
+        // Check all alternative hand configurations
+        self.remove_potential_sets(i + 1);
     }
 
-    remove_completed_sets(hand_table, &mut best_shanten, &mut complete_sets, &mut partial_sets, &mut pair, 1);
+    fn remove_completed_sets(&mut self, mut i: usize) {
+        // Skip to the next tile that exists in the hand.
+        while i < self.hand_table.len() && self.hand_table[i] == 0 { i += 1; }
 
-    return best_shanten;
-}
+        if i >= self.hand_table.len() {
+            // We've gone through the whole hand, now check for partial sets.
+            self.remove_potential_sets(0);
+            return;
+        }
 
-fn calculate_shanten(tiles: &[Tile]) -> i32 {
-    let mut hand_table: HandFrequencyTable = make_frequency_table(&tiles);
-    return calculate_shanten_on_table(&mut hand_table);
-}
+        // Triplet
+        if self.hand_table[i] >= 3 {
+            self.complete_sets += 1;
+            self.hand_table[i] -= 3;
+            self.remove_completed_sets(i);
+            self.hand_table[i] += 3;
+            self.complete_sets -= 1;
+        }
 
-fn calculate_hand_shanten(hand: &Hand) -> i32 {
-    assert!(hand.tiles[13] == EMPTY_TILE, "Shanten calculation alghorithm is expected to be called on 13 tiles");
-    return calculate_shanten(&hand.tiles[0..13]);
-}
+        // Sequence
+        if i < 30 && self.hand_table[i + 1] != 0 && self.hand_table[i + 2] != 0 {
+            self.complete_sets += 1;
+            self.hand_table[i] -= 1; self.hand_table[i + 1] -= 1; self.hand_table[i + 2] -= 1;
+            self.remove_completed_sets(i);
+            self.hand_table[i] += 1; self.hand_table[i + 1] += 1; self.hand_table[i + 2] += 1;
+            self.complete_sets -= 1;
+        }
 
-fn calculate_hand_shanten_14_tiles(hand: &Hand) -> i32 {
-    assert!(hand.tiles[13] != EMPTY_TILE, "14 tiles shanten calculation alghorithm is expected to be called on 14 tiles");
-    let mut minimal_shanten = 8;
-    let mut hand_table: HandFrequencyTable = make_frequency_table(&hand.tiles);
-    for tile in hand.tiles {
-        let tile_index = get_tile_index(&tile);
-        hand_table[tile_index] -= 1;
-        minimal_shanten = cmp::min(minimal_shanten, calculate_shanten_on_table(&mut hand_table));
-        hand_table[tile_index] += 1;
+        // Check all alternative hand configurations
+        self.remove_completed_sets(i + 1);
     }
-    // one more for the discard that needs to be made
-    return minimal_shanten + 1;
+
+    fn calculate_shanten(&mut self) {
+        for i in 0..self.hand_table.len() {
+            if self.hand_table[i] >= 2 {
+                self.pair += 1;
+                self.hand_table[i] -= 2;
+                self.waits_table[i] += 1;
+                self.remove_completed_sets(0);
+                self.waits_table[i] -= 1;
+                self.hand_table[i] += 2;
+                self.pair -= 1;
+            }
+        }
+
+        self.remove_completed_sets(0);
+    }
+
+    pub fn get_calculated_shanten(&self) -> i8 {
+        return self.best_shanten;
+    }
+}
+
+fn calculate_shanten(tiles: &[Tile]) -> ShantenCalculator {
+    assert!(tiles.len() == 13, "Shanten calculation alghorithm is expected to be called on 13 tiles");
+
+    let mut calculator = ShantenCalculator{
+        hand_table: make_frequency_table(&tiles),
+        waits_table: EMPTY_FREQUENCY_TABLE,
+        complete_sets: 0,
+        pair: 0,
+        partial_sets: 0,
+        best_shanten: 8,
+        best_waits: EMPTY_FREQUENCY_TABLE,
+    };
+    calculator.calculate_shanten();
+    return calculator;
 }
 
 fn draw_tile_to_hand(game: &mut GameState, hand_index: usize) {
@@ -427,72 +484,12 @@ fn get_tile_from_input(input: &str) -> Tile {
     return Tile{suit:suit.unwrap(), value:value};
 }
 
-fn try_remove_sequence(table: &mut HandFrequencyTable, start_position: usize) -> bool {
-    if start_position >= table.len() {
-        return false;
-    }
-
-    if table[start_position] > 0 && table[start_position + 1] > 0 && table[start_position + 2] > 0 {
-        table[start_position] -= 1;
-        table[start_position + 1] -= 1;
-        table[start_position + 2] -= 1;
-        return true
-    }
-    return false;
-}
-
 fn is_hand_complete(hand: &Hand) -> bool {
     assert!(hand.tiles[13] != EMPTY_TILE, "is_hand_complete should be called on a hand with 14 tiles");
 
-    let mut sets: u8 = 0;
+    let shanten_calculator = calculate_shanten(&hand.tiles[0..13]);
 
-    let mut table = make_frequency_table(&hand.tiles);
-    let mut has_pair = false;
-
-    // find disconnected tiles to finish early
-    for i in 0..table.len() {
-        if table[i] == 0 {
-            continue;
-        }
-
-        if table[i] == 1 {
-            if (i == 0 || table[i - 1] == 0) && (i == table.len() - 1 || table[i + 1] == 0) {
-                return false;
-            }
-        }
-    }
-
-    // remove all obvious sequences
-    for i in 0..table.len() {
-        if table[i] == 0 {
-            continue;
-        }
-
-        if table[i] == 1 {
-            if i == 0 || table[i - 1] == 0 {
-                if try_remove_sequence(&mut table, i) {
-                    sets += 1;
-                }
-                else {
-                    return false;
-                }
-            }
-            else if i >= 2 && (i < table.len() - 1 || table[i + 1] == 0) {
-                if try_remove_sequence(&mut table, i - 2) {
-                    sets += 1;
-                }
-                else {
-                    return false;
-                }
-            }
-        }
-    }
-
-    if sets == 4 {
-        return true;
-    }
-
-    return false;
+    return shanten_calculator.get_calculated_shanten() == 0 && shanten_calculator.best_waits[get_tile_index(&hand.tiles[13])] > 0;
 }
 
 fn main() {
@@ -505,12 +502,15 @@ fn main() {
 
         while !should_restart_game && !should_quit_game {
             if game.hands[0].tiles[13] == EMPTY_TILE {
-                let shanten = calculate_hand_shanten(&game.hands[0]);
+                let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13]);
+                let shanten = shanten_calculator.get_calculated_shanten();
                 if shanten > 0 {
                     println!("Shanten: {}", shanten);
+                    println!("Tiles that can improve hand: {}", get_printable_tiles_set(&convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits)))
                 }
                 else {
                     println!("The hand is tenpai (ready) now");
+                    println!("Waits: {}", get_printable_tiles_set(&convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits)))
                 }
 
                 draw_tile_to_hand(&mut game, 0);
