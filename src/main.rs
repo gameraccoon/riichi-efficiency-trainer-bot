@@ -500,14 +500,6 @@ fn get_tile_from_input(input: &str) -> Tile {
     return Tile{suit:suit.unwrap(), value:value};
 }
 
-fn is_hand_complete(hand: &Hand) -> bool {
-    assert!(hand.tiles[13] != EMPTY_TILE, "is_hand_complete should be called on a hand with 14 tiles");
-
-    let shanten_calculator = calculate_shanten(&hand.tiles[0..13]);
-
-    return shanten_calculator.get_calculated_shanten() == 0 && shanten_calculator.best_waits[get_tile_index(&hand.tiles[13])] > 0;
-}
-
 fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Tile> {
     assert!(tiles.len() == 14, "get_discards_reducing_shanten is expected to be called on 14 tiles");
 
@@ -559,6 +551,26 @@ fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_s
     return result;
 }
 
+fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile]) -> Vec<Tile> {
+    assert!(hand_tiles.len() == 13, "filter_tiles_improving_shanten is expected to be called on 13 tiles");
+
+    let mut extended_hand = [hand_tiles.to_vec(), [EMPTY_TILE].to_vec()].concat();
+
+    let mut result = Vec::new();
+
+    for i in 0..tiles.len() {
+        extended_hand[13] = tiles[i];
+
+        let calculator = calculate_shanten(&extended_hand);
+
+        if calculator.get_calculated_shanten() < 0 {
+            result.push(tiles[i]);
+        }
+    }
+
+    return result;
+}
+
 fn main() {
     let mut should_quit_game = false;
     let mut predefined_hand: String = "".to_string();
@@ -567,7 +579,8 @@ fn main() {
         let mut should_restart_game = false;
         let mut game = generate_dealed_game_with_hand(1, &predefined_hand);
 
-        while !should_restart_game && !should_quit_game {
+        while !should_restart_game && !should_quit_game && !game.live_wall.is_empty() {
+            let full_hand_shanten;
             if game.hands[0].tiles[13] == EMPTY_TILE {
                 let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13]);
                 let shanten = shanten_calculator.get_calculated_shanten();
@@ -578,21 +591,25 @@ fn main() {
                 }
                 else {
                     println!("The hand is tenpai (ready) now");
-                    println!("Waits: {}", get_printable_tiles_set(&convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits)))
+                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits))))
                 }
 
                 draw_tile_to_hand(&mut game, 0);
                 println!("Drawn {}{}", game.hands[0].tiles[13].value.to_string(), get_printable_suit(game.hands[0].tiles[13].suit));
                 println!("{} tiles left in the live wall", game.live_wall.len());
-                if calculate_shanten(&game.hands[0].tiles).get_calculated_shanten() < shanten {
+                full_hand_shanten = calculate_shanten(&game.hands[0].tiles).get_calculated_shanten();
+                if full_hand_shanten < shanten {
                     println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten)));
                 }
+            }
+            else {
+                full_hand_shanten = calculate_shanten(&game.hands[0].tiles).get_calculated_shanten();
             }
 
             print_hand(&game.hands[0]);
             print_hand_unicode(&game.hands[0]);
 
-            if is_hand_complete(&game.hands[0]) {
+            if full_hand_shanten < 0 {
                 println!("The hand is complete! Send \"n\" to start new hand, \"q\" to quit, or you can continue discarding tiles");
             }
             else {
