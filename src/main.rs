@@ -37,17 +37,18 @@ struct Hand {
 
 const EMPTY_HAND: Hand = Hand{tiles: [EMPTY_TILE; 14]};
 
+// store tiles as cumulative frequency distribution (store count of every possible tile in a hand)
+type TileFrequencyTable = [u8; 37];
+const EMPTY_FREQUENCY_TABLE: TileFrequencyTable = [0; 37];
+
 struct GameState {
     hands: Vec<Hand>,
     discards: Vec<Vec<Tile>>,
-    dead_wall: DeadWall,
+    total_discards_table: TileFrequencyTable,
+    _dead_wall: DeadWall,
     dora_indicators: [Tile; 8], // 1-3 - dora indicators, 4-7 - uradora indicators
     live_wall: Vec<Tile>,
 }
-
-// store tiles as cumulative frequency distribution (store count of every possible tile in a hand)
-type HandFrequencyTable = [u8; 37];
-const EMPTY_FREQUENCY_TABLE: HandFrequencyTable = [0; 37];
 
 fn print_hand(hand: &Hand) {
     println!("{}", get_printable_tiles_set(&hand.tiles));
@@ -189,7 +190,14 @@ fn generate_normal_dealed_game(player_count: u32) -> GameState {
         discards.push(Vec::new());
     }
 
-    return GameState{hands: hands, discards: discards, dead_wall: dead_wall, dora_indicators: dora_indicators, live_wall: tiles};
+    return GameState{
+        hands: hands,
+        discards: discards,
+        total_discards_table: EMPTY_FREQUENCY_TABLE,
+        _dead_wall: dead_wall,
+        dora_indicators: dora_indicators,
+        live_wall: tiles
+    };
 }
 
 fn make_hand_from_string(hand_string: &str) -> Hand {
@@ -268,11 +276,18 @@ fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str) -> GameS
         discards.push(Vec::new());
     }
 
-    return GameState{hands: hands, discards: discards, dead_wall: dead_wall, dora_indicators: dora_indicators, live_wall: tiles};
+    return GameState{
+        hands: hands,
+        discards: discards,
+        total_discards_table: EMPTY_FREQUENCY_TABLE,
+        _dead_wall: dead_wall,
+        dora_indicators: dora_indicators,
+        live_wall: tiles,
+    };
 }
 
-fn make_frequency_table(tiles: &[Tile]) -> HandFrequencyTable {
-    let mut result: HandFrequencyTable = EMPTY_FREQUENCY_TABLE;
+fn make_frequency_table(tiles: &[Tile]) -> TileFrequencyTable {
+    let mut result: TileFrequencyTable = EMPTY_FREQUENCY_TABLE;
 
     for tile in tiles {
         result[get_tile_index(tile)] += 1
@@ -281,7 +296,7 @@ fn make_frequency_table(tiles: &[Tile]) -> HandFrequencyTable {
     return result;
 }
 
-fn convert_frequency_table_to_flat_vec(frequency_table: &HandFrequencyTable) -> Vec<Tile> {
+fn convert_frequency_table_to_flat_vec(frequency_table: &TileFrequencyTable) -> Vec<Tile> {
     let mut result = Vec::new();
 
     for i in 0..frequency_table.len() {
@@ -294,20 +309,20 @@ fn convert_frequency_table_to_flat_vec(frequency_table: &HandFrequencyTable) -> 
     return result;
 }
 
-fn append_frequency_table(target_table: &mut HandFrequencyTable, addition_table: &HandFrequencyTable) {
+fn append_frequency_table(target_table: &mut TileFrequencyTable, addition_table: &TileFrequencyTable) {
     for i in 0..target_table.len() {
         target_table[i] += addition_table[i];
     }
 }
 
 pub struct ShantenCalculator {
-    hand_table: HandFrequencyTable,
-    waits_table: HandFrequencyTable,
+    hand_table: TileFrequencyTable,
+    waits_table: TileFrequencyTable,
     complete_sets: i8,
     pair: i8,
     partial_sets: i8,
     best_shanten: i8,
-    best_waits: HandFrequencyTable,
+    best_waits: TileFrequencyTable,
 }
 
 impl ShantenCalculator {
@@ -457,11 +472,14 @@ fn draw_tile_to_hand(game: &mut GameState, hand_index: usize) {
 }
 
 fn discard_tile(game: &mut GameState, hand_index: usize, tile_index: usize) {
-    game.discards[hand_index].push(game.hands[hand_index].tiles[tile_index]);
+    let discarded_tile = game.hands[hand_index].tiles[tile_index];
     game.hands[hand_index].tiles[tile_index..14].rotate_left(1);
     game.hands[hand_index].tiles[13] = EMPTY_TILE;
     // we sort in the tile that was added the last
     sort_hand(&mut game.hands[hand_index]);
+
+    game.total_discards_table[get_tile_index(&discarded_tile)] += 1;
+    game.discards[hand_index].push(discarded_tile);
 }
 
 fn get_tile_from_input(input: &str) -> Tile {
@@ -509,6 +527,18 @@ fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Til
     return result;
 }
 
+fn find_potentially_available_tile_count(game: &GameState, visible_hand_index: usize, tiles: &[Tile]) -> u32 {
+    let mut result = 0;
+    for tile in tiles {
+        result += 4
+                -(game.total_discards_table[get_tile_index(tile)] as u32)
+                -(game.hands[visible_hand_index].tiles.iter().filter(|&t| *t == *tile).count() as u32)
+                -(if game.dora_indicators[0] == *tile {1} else {0});
+    }
+
+    return result;
+}
+
 fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_shanten: i8) -> Vec<Tile> {
     assert!(hand_tiles.len() == 13, "filter_tiles_improving_shanten is expected to be called on 13 tiles");
 
@@ -543,7 +573,8 @@ fn main() {
                 let shanten = shanten_calculator.get_calculated_shanten();
                 if shanten > 0 {
                     println!("Shanten: {}", shanten);
-                    println!("Tiles that can improve shanten: {}", get_printable_tiles_set(&filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten)));
+                    let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten);
+                    println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
                 }
                 else {
                     println!("The hand is tenpai (ready) now");
