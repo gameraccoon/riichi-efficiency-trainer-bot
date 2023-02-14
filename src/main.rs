@@ -370,7 +370,7 @@ impl ShantenCalculator {
             }
 
             // Closed wait protorun
-            if i < 30 && i % 10 <= 8 && self.hand_table[i + 2] != 0 {
+            if i < 30 && i % 10 <= 7 && self.hand_table[i + 2] != 0 {
                 self.partial_sets += 1;
                 self.hand_table[i] -= 1; self.hand_table[i + 2] -= 1;
                 self.waits_table[i + 1] += 1;
