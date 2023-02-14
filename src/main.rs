@@ -439,8 +439,6 @@ impl ShantenCalculator {
 }
 
 fn calculate_shanten(tiles: &[Tile]) -> ShantenCalculator {
-    assert!(tiles.len() == 13, "Shanten calculation alghorithm is expected to be called on 13 tiles");
-
     let mut calculator = ShantenCalculator{
         hand_table: make_frequency_table(&tiles),
         waits_table: EMPTY_FREQUENCY_TABLE,
@@ -492,6 +490,45 @@ fn is_hand_complete(hand: &Hand) -> bool {
     return shanten_calculator.get_calculated_shanten() == 0 && shanten_calculator.best_waits[get_tile_index(&hand.tiles[13])] > 0;
 }
 
+fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Tile> {
+    assert!(tiles.len() == 14, "get_discards_reducing_shanten is expected to be called on 14 tiles");
+
+    let mut result = Vec::with_capacity(tiles.len());
+
+    for i in 0..14 {
+        let mut reduced_tiles = tiles.to_vec();
+        reduced_tiles.remove(i);
+
+        let calculator = calculate_shanten(&reduced_tiles);
+
+        if calculator.get_calculated_shanten() < current_shanten {
+            result.push(tiles[i]);
+        }
+    }
+
+    return result;
+}
+
+fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_shanten: i8) -> Vec<Tile> {
+    assert!(hand_tiles.len() == 13, "filter_tiles_improving_shanten is expected to be called on 13 tiles");
+
+    let mut extended_hand = [hand_tiles.to_vec(), [EMPTY_TILE].to_vec()].concat();
+
+    let mut result = Vec::new();
+
+    for i in 0..tiles.len() {
+        extended_hand[13] = tiles[i];
+
+        let calculator = calculate_shanten(&extended_hand);
+
+        if calculator.get_calculated_shanten() < current_shanten {
+            result.push(tiles[i]);
+        }
+    }
+
+    return result;
+}
+
 fn main() {
     let mut should_quit_game = false;
     let mut predefined_hand: String = "".to_string();
@@ -506,7 +543,7 @@ fn main() {
                 let shanten = shanten_calculator.get_calculated_shanten();
                 if shanten > 0 {
                     println!("Shanten: {}", shanten);
-                    println!("Tiles that can improve hand: {}", get_printable_tiles_set(&convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits)))
+                    println!("Tiles that can improve shanten: {}", get_printable_tiles_set(&filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten)));
                 }
                 else {
                     println!("The hand is tenpai (ready) now");
@@ -516,6 +553,9 @@ fn main() {
                 draw_tile_to_hand(&mut game, 0);
                 println!("Drawn {}{}", game.hands[0].tiles[13].value.to_string(), get_printable_suit(game.hands[0].tiles[13].suit));
                 println!("{} tiles left in the live wall", game.live_wall.len());
+                if calculate_shanten(&game.hands[0].tiles).get_calculated_shanten() < shanten {
+                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten)));
+                }
             }
 
             print_hand(&game.hands[0]);
