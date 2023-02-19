@@ -240,8 +240,6 @@ fn make_hand_from_string(hand_string: &str) -> Hand {
 }
 
 fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str) -> GameState {
-    println!("requested hand: {}", hand_string);
-
     let predefined_hand = make_hand_from_string(&hand_string);
 
     if predefined_hand.tiles[0] == EMPTY_TILE {
@@ -311,7 +309,7 @@ fn convert_frequency_table_to_flat_vec(frequency_table: &TileFrequencyTable) -> 
 
 fn append_frequency_table(target_table: &mut TileFrequencyTable, addition_table: &TileFrequencyTable) {
     for i in 0..target_table.len() {
-        target_table[i] += addition_table[i];
+        target_table[i] |= addition_table[i];
     }
 }
 
@@ -326,6 +324,31 @@ pub struct ShantenCalculator {
 }
 
 impl ShantenCalculator {
+    fn append_single_tiles_left(&mut self) {
+        for i in 0..self.hand_table.len() {
+            if self.hand_table[i] == 1 {
+                // potential pair
+                self.best_waits[i] += 1;
+                // potential protoruns
+                if i < 30 {
+                    let pos_in_suit = i % 10;
+                    if pos_in_suit >= 1 {
+                        self.best_waits[i - 1] += 1;
+                    }
+                    if pos_in_suit >= 2 {
+                        self.best_waits[i - 2] += 1;
+                    }
+                    if pos_in_suit <= 7 {
+                        self.best_waits[i + 1] += 1;
+                    }
+                    if pos_in_suit <= 6 {
+                        self.best_waits[i + 2] += 1;
+                    }
+                }
+            }
+        }
+    }
+
     fn remove_potential_sets(&mut self, mut i: usize) {
         // Skip to the next tile that exists in the hand
         while i < self.hand_table.len() && self.hand_table[i] == 0 { i += 1; }
@@ -336,13 +359,11 @@ impl ShantenCalculator {
             if current_shanten < self.best_shanten {
                 self.best_shanten = current_shanten;
                 self.best_waits = self.waits_table.clone();
-                // append single tiles that was left, as uncompleted pairs
-                append_frequency_table(&mut self.best_waits, &self.hand_table);
+                self.append_single_tiles_left();
             }
             else if current_shanten == self.best_shanten {
                 append_frequency_table(&mut self.best_waits, &self.waits_table);
-                // append single tiles that was left, as uncompleted pairs
-                append_frequency_table(&mut self.best_waits, &self.hand_table);
+                self.append_single_tiles_left();
             }
             return;
         }
@@ -578,6 +599,8 @@ fn main() {
     while !should_quit_game {
         let mut should_restart_game = false;
         let mut game = generate_dealed_game_with_hand(1, &predefined_hand);
+
+        println!("Dealed hand: {}", get_printable_tiles_set(&game.hands[0].tiles));
 
         while !should_restart_game && !should_quit_game && !game.live_wall.is_empty() {
             let full_hand_shanten;
