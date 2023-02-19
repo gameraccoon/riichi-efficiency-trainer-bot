@@ -7,3 +7,8 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.4"
+teloxide = { version = "0.12", features = ["macros", "auto-send"] }
+log = "0.4"
+pretty_env_logger = "0.4"
+tokio = { version = "1.8", features = ["rt-multi-thread", "macros"] }
+dashmap = "5.4.0"

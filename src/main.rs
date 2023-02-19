@@ -1,7 +1,11 @@
 extern crate rand;
 
+use std::sync::Arc;
 use crate::rand::prelude::SliceRandom;
+use dashmap::DashMap;
+use std::fs;
 use rand::thread_rng;
+use teloxide::prelude::*;
 
 
 const TILE_UNICODE: [&str; 37] = [
@@ -592,7 +596,7 @@ fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile]) -> Vec<Tile>
     return result;
 }
 
-fn main() {
+fn play_in_console() {
     let mut should_quit_game = false;
     let mut predefined_hand: String = "".to_string();
 
@@ -671,4 +675,61 @@ fn main() {
             }
         }
     }
+}
+
+fn read_telegram_token() -> String {
+    return fs::read_to_string("./telegramApiToken.txt")
+        .expect("Can't read file \"telegramApiToken.txt\", please make sure the file exists and contains the bot API Token");
+}
+
+struct UserState {
+    game_state: GameState,
+}
+
+async fn run_telegram_bot() {
+    pretty_env_logger::init();
+    log::info!("Starting the bot");
+
+    let token = read_telegram_token();
+
+    let bot = Bot::new(token);
+
+    type UserStates = DashMap<ChatId, UserState>;
+    type SharedUserStates = Arc<UserStates>;
+
+    let user_states = SharedUserStates::new(UserStates::new());
+
+    let handler = Update::filter_message().endpoint(
+        |bot: Bot, user_states: SharedUserStates, message: Message| async move {
+            let user_state: &UserState = &user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: generate_normal_dealed_game(1)});
+
+            bot.send_message(message.chat.id, format!("Current haand {}", get_printable_tiles_set(&user_state.game_state.hands[0].tiles))).await?;
+            respond(())
+        },
+    );
+
+    Dispatcher::builder(bot, handler)
+        // Pass the shared state to the handler as a dependency.
+        .dependencies(dptree::deps![user_states.clone()])
+        .build()
+        .dispatch()
+        .await;
+
+    /*teloxide::repl(bot, |message: Message, games: &mut GameState, bot: AutoSend<Bot>| async move {
+        let games = &mut games;
+        let current_game: &GameState;
+        match games.get(&message.chat.id) {
+            Some(game) => current_game = game,
+            None => current_game = &games.insert(message.chat.id, generate_normal_dealed_game(1)).unwrap(),
+        }
+        bot.send_message(message.chat.id, "a response").await?;
+        respond(())
+    })
+    .await;*/
+}
+
+#[tokio::main]
+async fn main() {
+    //play_in_console();
+    run_telegram_bot().await;
 }
