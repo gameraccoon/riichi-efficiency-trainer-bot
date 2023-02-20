@@ -781,11 +781,11 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
                 let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), new_shanten);
-                answer += &format!("Discarded tile {}{} with {} tiles to improve\n", tile.value, get_printable_suit(tile.suit), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
+                answer += &format!("Discarded tile {}{} ({} tiles)\n", tile.value, get_printable_suit(tile.suit), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
             }
             else {
                 answer += "The hand is tenpai (ready) now\n";
-                answer += &format!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits))))
+                answer += &format!("Waits: {}\n", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits))))
             }
         },
         None => { answer += "Could not find the given tile in the hand\n"; },
@@ -804,7 +804,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
                             answer += "Best discard\n"
                         }
                         else {
-                            answer += &format!("Better discards: {} with {} tiles to improve\n", get_printable_tiles_set(&best_discards.tiles), best_discards.improvement_tile_count);
+                            answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles), best_discards.improvement_tile_count);
                         }
                     }
                 }
