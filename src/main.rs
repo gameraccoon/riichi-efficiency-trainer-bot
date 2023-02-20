@@ -546,8 +546,12 @@ fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Til
     assert!(tiles.len() == 14, "get_discards_reducing_shanten is expected to be called on 14 tiles");
 
     let mut result = Vec::with_capacity(tiles.len());
+    let mut previous_tile = EMPTY_TILE;
 
     for i in 0..14 {
+        if tiles[i] == previous_tile {
+            continue;
+        }
         let mut reduced_tiles = tiles.to_vec();
         reduced_tiles.remove(i);
 
@@ -556,18 +560,25 @@ fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Til
         if calculator.get_calculated_shanten() < current_shanten {
             result.push(tiles[i]);
         }
+        previous_tile = tiles[i];
     }
 
     return result;
 }
 
-fn find_potentially_available_tile_count(game: &GameState, visible_hand_index: usize, tiles: &[Tile]) -> u32 {
+fn find_potentially_available_tile_count(game: &GameState, visible_hand_index: usize, tiles: &[Tile]) -> u8 {
     let mut result = 0;
+    let mut previous_tile = EMPTY_TILE;
     for tile in tiles {
+        if *tile == previous_tile {
+            continue;
+        }
+
         result += 4
-                -(game.total_discards_table[get_tile_index(tile)] as u32)
-                -(game.hands[visible_hand_index].tiles.iter().filter(|&t| *t == *tile).count() as u32)
+                -(game.total_discards_table[get_tile_index(tile)] as u8)
+                -(game.hands[visible_hand_index].tiles.iter().filter(|&t| *t == *tile).count() as u8)
                 -(if game.dora_indicators[0] == *tile {1} else {0});
+        previous_tile = *tile;
     }
 
     return result;
@@ -635,7 +646,7 @@ fn play_in_console() {
                 }
                 else {
                     println!("The hand is tenpai (ready) now");
-                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits))))
+                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits))));
                 }
 
                 draw_tile_to_hand(&mut game, 0);
