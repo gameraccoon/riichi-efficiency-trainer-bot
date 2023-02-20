@@ -350,21 +350,21 @@ impl ShantenCalculator {
         for i in 0..self.hand_table.len() {
             if self.hand_table[i] == 1 {
                 // potential pair
-                self.best_waits[i] += 1;
+                self.best_waits[i] |= 1;
                 // potential protoruns
                 if i < 30 {
                     let pos_in_suit = i % 10;
                     if pos_in_suit >= 1 {
-                        self.best_waits[i - 1] += 1;
+                        self.best_waits[i - 1] |= 1;
                     }
                     if pos_in_suit >= 2 {
-                        self.best_waits[i - 2] += 1;
+                        self.best_waits[i - 2] |= 1;
                     }
                     if pos_in_suit <= 7 {
-                        self.best_waits[i + 1] += 1;
+                        self.best_waits[i + 1] |= 1;
                     }
                     if pos_in_suit <= 6 {
-                        self.best_waits[i + 2] += 1;
+                        self.best_waits[i + 2] |= 1;
                     }
                 }
             }
