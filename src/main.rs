@@ -3,6 +3,7 @@ extern crate rand;
 use std::sync::Arc;
 use crate::rand::prelude::SliceRandom;
 use dashmap::DashMap;
+use std::env;
 use std::fs;
 use rand::thread_rng;
 use teloxide::prelude::*;
@@ -177,7 +178,7 @@ fn populate_full_set() -> Vec<Tile> {
     return result;
 }
 
-fn generate_normal_dealed_game(player_count: u32) -> GameState {
+fn generate_normal_dealed_game(player_count: u32, deal_first_tile: bool) -> GameState {
     let mut tiles = populate_full_set();
     tiles.shuffle(&mut thread_rng());
 
@@ -194,7 +195,7 @@ fn generate_normal_dealed_game(player_count: u32) -> GameState {
         discards.push(Vec::new());
     }
 
-    return GameState{
+    let mut game_state = GameState{
         hands: hands,
         discards: discards,
         total_discards_table: EMPTY_FREQUENCY_TABLE,
@@ -202,6 +203,12 @@ fn generate_normal_dealed_game(player_count: u32) -> GameState {
         dora_indicators: dora_indicators,
         live_wall: tiles
     };
+
+    if deal_first_tile {
+        draw_tile_to_hand(&mut game_state, 0);
+    }
+
+    return game_state;
 }
 
 fn make_hand_from_string(hand_string: &str) -> Hand {
@@ -243,11 +250,11 @@ fn make_hand_from_string(hand_string: &str) -> Hand {
     return hand;
 }
 
-fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str) -> GameState {
+fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str, deal_first_tile: bool) -> GameState {
     let predefined_hand = make_hand_from_string(&hand_string);
 
     if predefined_hand.tiles[0] == EMPTY_TILE {
-        return generate_normal_dealed_game(player_count);
+        return generate_normal_dealed_game(player_count, deal_first_tile);
     }
 
     let mut tiles = populate_full_set();
@@ -278,7 +285,7 @@ fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str) -> GameS
         discards.push(Vec::new());
     }
 
-    return GameState{
+    let mut game_state = GameState{
         hands: hands,
         discards: discards,
         total_discards_table: EMPTY_FREQUENCY_TABLE,
@@ -286,12 +293,21 @@ fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str) -> GameS
         dora_indicators: dora_indicators,
         live_wall: tiles,
     };
+
+    if game_state.hands[0].tiles.len() < 14 && deal_first_tile {
+        draw_tile_to_hand(&mut game_state, 0);
+    }
+
+    return game_state;
 }
 
 fn make_frequency_table(tiles: &[Tile]) -> TileFrequencyTable {
     let mut result: TileFrequencyTable = EMPTY_FREQUENCY_TABLE;
 
     for tile in tiles {
+        if *tile == EMPTY_TILE {
+            panic!("Incorrect tile in shanten calculation: {}", get_printable_tiles_set(tiles));
+        }
         result[get_tile_index(tile)] += 1
     }
 
@@ -496,7 +512,7 @@ fn draw_tile_to_hand(game: &mut GameState, hand_index: usize) {
     game.hands[hand_index].tiles[13] = game.live_wall.split_off(game.live_wall.len() - 1)[0];
 }
 
-fn discard_tile(game: &mut GameState, hand_index: usize, tile_index: usize) {
+fn discard_tile(game: &mut GameState, hand_index: usize, tile_index: usize) -> Tile {
     let discarded_tile = game.hands[hand_index].tiles[tile_index];
     game.hands[hand_index].tiles[tile_index..14].rotate_left(1);
     game.hands[hand_index].tiles[13] = EMPTY_TILE;
@@ -505,6 +521,7 @@ fn discard_tile(game: &mut GameState, hand_index: usize, tile_index: usize) {
 
     game.total_discards_table[get_tile_index(&discarded_tile)] += 1;
     game.discards[hand_index].push(discarded_tile);
+    return discarded_tile;
 }
 
 fn get_tile_from_input(input: &str) -> Tile {
@@ -602,7 +619,7 @@ fn play_in_console() {
 
     while !should_quit_game {
         let mut should_restart_game = false;
-        let mut game = generate_dealed_game_with_hand(1, &predefined_hand);
+        let mut game = generate_dealed_game_with_hand(1, &predefined_hand, false);
 
         println!("Dealed hand: {}", get_printable_tiles_set(&game.hands[0].tiles));
 
@@ -686,6 +703,55 @@ struct UserState {
     game_state: GameState,
 }
 
+fn process_user_message(user_state: &mut UserState, message: &Message) -> String {
+    if message.text().is_none() {
+        return "No message received".to_string();
+    }
+
+    let mut answer: String = String::new();
+
+    let requested_tile = get_tile_from_input(message.text().unwrap());
+    if requested_tile == EMPTY_TILE {
+        return "Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string();
+    }
+
+    let full_hand_shanten = calculate_shanten(&user_state.game_state.hands[0].tiles).get_calculated_shanten();
+
+    match user_state.game_state.hands[0].tiles.iter().position(|&r| r == requested_tile) {
+        Some(tile_index_in_hand) => {
+            let tile = discard_tile(&mut user_state.game_state, 0, tile_index_in_hand as usize);
+            answer += &format!("Discarded tile {}{}\n", tile.value, get_printable_suit(tile.suit));
+        },
+        None => { answer += "Could not find the given tile in the hand\n"; },
+    }
+
+    if user_state.game_state.hands[0].tiles[13] == EMPTY_TILE {
+        let shanten_calculator = calculate_shanten(&user_state.game_state.hands[0].tiles[0..13]);
+        let shanten = shanten_calculator.get_calculated_shanten();
+        if shanten > 0 {
+            if shanten > full_hand_shanten {
+                answer += "Went back in shanten\n";
+            } else {
+
+            }
+        }
+        else {
+            user_state.game_state = generate_normal_dealed_game(1, true);
+            answer += "The hand is tenpai (ready) now\n\nNew hand:\n";
+            answer += &get_printable_tiles_set_unicode(&user_state.game_state.hands[0].tiles);
+            return answer;
+        }
+
+        draw_tile_to_hand(&mut user_state.game_state, 0);
+        answer += &format!("Drawn {}{}\n", user_state.game_state.hands[0].tiles[13].value.to_string(), get_printable_suit(user_state.game_state.hands[0].tiles[13].suit));
+        answer += &format!("{} tiles left in the live wall\n", user_state.game_state.live_wall.len());
+    }
+
+    answer += &get_printable_tiles_set_unicode(&user_state.game_state.hands[0].tiles);
+
+    return answer;
+}
+
 async fn run_telegram_bot() {
     pretty_env_logger::init();
     log::info!("Starting the bot");
@@ -701,9 +767,9 @@ async fn run_telegram_bot() {
 
     let handler = Update::filter_message().endpoint(
         |bot: Bot, user_states: SharedUserStates, message: Message| async move {
-            let user_state: &UserState = &user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: generate_normal_dealed_game(1)});
-
-            bot.send_message(message.chat.id, format!("Current haand {}", get_printable_tiles_set(&user_state.game_state.hands[0].tiles))).await?;
+            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: generate_normal_dealed_game(1, true)});
+            let response = process_user_message(user_state, &message);
+            bot.send_message(message.chat.id, response).await?;
             respond(())
         },
     );
@@ -714,22 +780,15 @@ async fn run_telegram_bot() {
         .build()
         .dispatch()
         .await;
-
-    /*teloxide::repl(bot, |message: Message, games: &mut GameState, bot: AutoSend<Bot>| async move {
-        let games = &mut games;
-        let current_game: &GameState;
-        match games.get(&message.chat.id) {
-            Some(game) => current_game = game,
-            None => current_game = &games.insert(message.chat.id, generate_normal_dealed_game(1)).unwrap(),
-        }
-        bot.send_message(message.chat.id, "a response").await?;
-        respond(())
-    })
-    .await;*/
 }
 
 #[tokio::main]
 async fn main() {
-    //play_in_console();
-    run_telegram_bot().await;
+    let args = env::args();
+    if args.len() > 1 {
+        play_in_console();
+    }
+    else {
+        run_telegram_bot().await;
+    }
 }
