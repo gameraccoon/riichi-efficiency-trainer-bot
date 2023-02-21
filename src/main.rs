@@ -784,8 +784,9 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
                 answer += &format!("Discarded tile {}{} ({} tiles)\n", tile.value, get_printable_suit(tile.suit), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
             }
             else {
-                answer += "The hand is tenpai (ready) now\n";
-                answer += &format!("Waits: {}\n", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits))))
+                answer += "The hand is ready now\n";
+                let wait_tiles = &filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
+                answer += &format!("Waits: {} ({} tiles)\n", get_printable_tiles_set(wait_tiles), find_potentially_available_tile_count(&game, 0, &wait_tiles))
             }
         },
         None => { answer += "Could not find the given tile in the hand\n"; },
