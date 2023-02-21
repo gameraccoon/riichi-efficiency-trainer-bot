@@ -1,11 +1,12 @@
 extern crate rand;
 
-use std::sync::Arc;
 use crate::rand::prelude::SliceRandom;
 use dashmap::DashMap;
+use rand::thread_rng;
+use std::cmp::max;
 use std::env;
 use std::fs;
-use rand::thread_rng;
+use std::sync::Arc;
 use teloxide::prelude::*;
 
 
@@ -327,9 +328,15 @@ fn convert_frequency_table_to_flat_vec(frequency_table: &TileFrequencyTable) -> 
     return result;
 }
 
+fn set_max(element: &mut u8, value: u8) {
+    *element = max(*element, value);
+}
+
 fn append_frequency_table(target_table: &mut TileFrequencyTable, addition_table: &TileFrequencyTable) {
     for i in 0..target_table.len() {
-        target_table[i] |= addition_table[i];
+        if addition_table[i] > 0 {
+            set_max(&mut target_table[i], 2);
+        }
     }
 }
 
@@ -350,21 +357,21 @@ impl ShantenCalculator {
         for i in 0..self.hand_table.len() {
             if self.hand_table[i] == 1 {
                 // potential pair
-                self.best_waits[i] |= 1;
+                set_max(&mut self.best_waits[i], 1);
                 // potential protoruns
                 if i < 30 {
                     let pos_in_suit = i % 10;
                     if pos_in_suit >= 1 {
-                        self.best_waits[i - 1] |= 1;
+                        set_max(&mut self.best_waits[i - 1], 1);
                     }
                     if pos_in_suit >= 2 {
-                        self.best_waits[i - 2] |= 1;
+                        set_max(&mut self.best_waits[i - 2], 1);
                     }
                     if pos_in_suit <= 7 {
-                        self.best_waits[i + 1] |= 1;
+                        set_max(&mut self.best_waits[i + 1], 1);
                     }
                     if pos_in_suit <= 6 {
-                        self.best_waits[i + 2] |= 1;
+                        set_max(&mut self.best_waits[i + 2], 1);
                     }
                 }
             }
@@ -665,6 +672,27 @@ fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten:
     return DiscardScores{tiles: result_tiles, improvement_tile_count: max_available_tiles};
 }
 
+fn has_furiten_waits(waits: &Vec<Tile>, discards: &Vec<Tile>) -> bool {
+    let discards_table = make_frequency_table(discards);
+    for tile in waits {
+        if discards_table[get_tile_index(&tile)] > 0 {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn has_potential_for_furiten(waits_table: &TileFrequencyTable, discards: &Vec<Tile>) -> bool {
+    for tile in discards {
+        if waits_table[get_tile_index(&tile)] > 1 {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 fn play_in_console() {
     let mut should_quit_game = false;
     let mut predefined_hand: String = "".to_string();
@@ -786,13 +814,21 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
             let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13]);
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
-                let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), new_shanten);
+                let possible_waits = convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits);
+                let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &possible_waits, new_shanten);
                 answer += &format!("Discarded tile {}{} ({} tiles)\n", tile.value, get_printable_suit(tile.suit), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
+                if has_potential_for_furiten(&shanten_calculator.best_waits, &game.discards[0]) {
+                    answer += "Possible furiten\n";
+                }
             }
             else {
                 answer += "The hand is ready now\n";
-                let wait_tiles = &filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
-                answer += &format!("Waits: {} ({} tiles)\n", get_printable_tiles_set(wait_tiles), find_potentially_available_tile_count(&game, 0, &wait_tiles))
+                let wait_tiles = filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
+                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles), find_potentially_available_tile_count(&game, 0, &wait_tiles));
+                if has_furiten_waits(&wait_tiles, &game.discards[0]) {
+                    answer += " furiten";
+                }
+                answer += "\n";
             }
         },
         None => { answer += "Could not find the given tile in the hand\n"; },
@@ -820,7 +856,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
                         answer += "Best discard\n"
                     }
                     else {
-                        answer += &format!("Better discards: {} waiting for {} tiles\n", get_printable_tiles_set(&best_discards.tiles), best_discards.improvement_tile_count);
+                        answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles), best_discards.improvement_tile_count);
                     }
 
                     user_state.game_state = generate_normal_dealed_game(1, true);
