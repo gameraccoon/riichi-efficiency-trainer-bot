@@ -760,9 +760,15 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
         return "No message received".to_string();
     }
 
+    let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
 
-    let requested_tile = get_tile_from_input(message.text().unwrap());
+    if message_text == &"/start" {
+        answer += "Current hand:\n";
+        return answer + &get_printable_tiles_set(&user_state.game_state.hands[0].tiles);
+    }
+
+    let requested_tile = get_tile_from_input(message_text);
     if requested_tile == EMPTY_TILE {
         return "Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string();
     }
