@@ -47,6 +47,7 @@ const EMPTY_HAND: Hand = Hand{tiles: [EMPTY_TILE; 14]};
 type TileFrequencyTable = [u8; 37];
 const EMPTY_FREQUENCY_TABLE: TileFrequencyTable = [0; 37];
 
+#[derive(Clone)]
 struct GameState {
     hands: Vec<Hand>,
     discards: Vec<Vec<Tile>>,
@@ -633,16 +634,16 @@ fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile]) -> Vec<Tile>
     return result;
 }
 
-#[derive(Clone)]
-struct DiscardScores {
-    tiles: Vec<Tile>,
+struct WeightedDiscard {
+    tile: Tile,
+    tiles_improving_shanten: Vec<Tile>,
     improvement_tile_count: u8,
 }
 
-fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten: i8) -> DiscardScores {
+fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten: i8) -> Vec<WeightedDiscard> {
     assert!(game.hands[hand_index].tiles[13] != EMPTY_TILE, "calculate_best_discards expected hand with 14 tiles");
-    let mut max_available_tiles = 0;
-    let mut result_tiles = Vec::with_capacity(14);
+
+    let mut possible_discards = Vec::with_capacity(14);
     let mut previous_tile = EMPTY_TILE;
 
     for i in 0..14 {
@@ -657,19 +658,77 @@ fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten:
         if calculator.get_calculated_shanten() == minimal_shanten {
             let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten);
             let available_tiles = find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten);
-            if available_tiles > max_available_tiles {
-                result_tiles = [game.hands[hand_index].tiles[i]].to_vec();
-                max_available_tiles = available_tiles;
-            }
-            else if available_tiles == max_available_tiles {
-                result_tiles.push(game.hands[hand_index].tiles[i]);
-            }
+            possible_discards.push(WeightedDiscard{
+                tile: game.hands[hand_index].tiles[i],
+                tiles_improving_shanten: tiles_improving_shanten,
+                improvement_tile_count: available_tiles,
+            });
         }
 
         previous_tile = game.hands[hand_index].tiles[i];
     }
 
-    return DiscardScores{tiles: result_tiles, improvement_tile_count: max_available_tiles};
+    possible_discards.sort_by(|a: &WeightedDiscard, b: &WeightedDiscard| {
+        if a.improvement_tile_count > b.improvement_tile_count
+        {
+            std::cmp::Ordering::Less
+        }
+        else if a.improvement_tile_count < b.improvement_tile_count
+        {
+            std::cmp::Ordering::Greater
+        }
+        else {
+            std::cmp::Ordering::Equal
+        }
+    });
+
+    return possible_discards;
+}
+
+#[derive(Clone)]
+struct DiscardScores {
+    tiles: Vec<Tile>,
+    improvement_tile_count: u8,
+}
+
+fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten: i8) -> DiscardScores {
+    let best_discards = calculate_best_discards(&game, hand_index, minimal_shanten);
+    if !best_discards.is_empty() {
+        let mut result = DiscardScores{ tiles: Vec::new(), improvement_tile_count: best_discards[0].improvement_tile_count };
+        for tile_info in best_discards {
+            if tile_info.improvement_tile_count < result.improvement_tile_count {
+                break;
+            }
+
+            result.tiles.push(tile_info.tile);
+        }
+        return result;
+    }
+
+    return DiscardScores{ tiles: Vec::new(), improvement_tile_count: 0 };
+}
+
+struct PreviousMoveData {
+    game_state: GameState,
+    hand_index: usize,
+    full_hand_shanten: i8,
+    discarded_tile: Tile,
+}
+
+fn get_move_explanation_text(previous_move: &PreviousMoveData) -> String {
+    assert!(previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE, "Expected move state hand have 14 tiles before the discard");
+
+    let best_discards = calculate_best_discards(&previous_move.game_state, previous_move.hand_index, previous_move.full_hand_shanten);
+
+    let mut result = String::new();
+    for discard_info in best_discards {
+        result += &format!("{}{}: {} ({} left)\n",
+            discard_info.tile.value, get_printable_suit(discard_info.tile.suit),
+            get_printable_tiles_set(&discard_info.tiles_improving_shanten),
+            discard_info.improvement_tile_count,
+        )
+    }
+    return result;
 }
 
 fn has_furiten_waits(waits: &Vec<Tile>, discards: &Vec<Tile>) -> bool {
@@ -781,6 +840,7 @@ fn read_telegram_token() -> String {
 
 struct UserState {
     game_state: GameState,
+    previous_move: Option<PreviousMoveData>,
 }
 
 fn process_user_message(user_state: &mut UserState, message: &Message) -> String {
@@ -791,9 +851,17 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
     let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
 
-    if message_text == &"/start" {
-        answer += "Current hand:\n";
-        return answer + &get_printable_tiles_set(&user_state.game_state.hands[0].tiles);
+    match *message_text {
+        "/start" => {
+            return "Current hand:\n".to_string() + &get_printable_tiles_set(&user_state.game_state.hands[0].tiles);
+        },
+        "/explain" => {
+            return match &user_state.previous_move {
+                Some(previous_move) => get_move_explanation_text(&previous_move),
+                None => "No moves are recorded to explain".to_string(),
+            }
+        },
+        _ => {},
     }
 
     let requested_tile = get_tile_from_input(message_text);
@@ -801,31 +869,31 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
         return "Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string();
     }
 
-    let game = &mut user_state.game_state;
-
-    let full_hand_shanten = calculate_shanten(&game.hands[0].tiles).get_calculated_shanten();
-    let best_discards = calculate_best_discards(&game, 0, full_hand_shanten);
+    let full_hand_shanten = calculate_shanten(&user_state.game_state.hands[0].tiles).get_calculated_shanten();
+    let best_discards = get_best_discard_scores(&user_state.game_state, 0, full_hand_shanten);
     let mut discarded_tile = None;
 
-    match game.hands[0].tiles.iter().position(|&r| r == requested_tile) {
+    match user_state.game_state.hands[0].tiles.iter().position(|&r| r == requested_tile) {
         Some(tile_index_in_hand) => {
-            let tile = discard_tile(game, 0, tile_index_in_hand as usize);
+            user_state.previous_move = Some(PreviousMoveData{ game_state: user_state.game_state.clone(), hand_index: 0, full_hand_shanten: full_hand_shanten, discarded_tile: EMPTY_TILE });
+            let tile = discard_tile(&mut user_state.game_state, 0, tile_index_in_hand as usize);
             discarded_tile = Some(tile);
-            let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13]);
+            user_state.previous_move.as_mut().unwrap().discarded_tile = tile;
+            let shanten_calculator = calculate_shanten(&user_state.game_state.hands[0].tiles[0..13]);
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
                 let possible_waits = convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits);
-                let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &possible_waits, new_shanten);
-                answer += &format!("Discarded tile {}{} ({} tiles)\n", tile.value, get_printable_suit(tile.suit), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
-                if has_potential_for_furiten(&shanten_calculator.best_waits, &game.discards[0]) {
+                let tiles_improving_shanten = filter_tiles_improving_shanten(&user_state.game_state.hands[0].tiles[0..13], &possible_waits, new_shanten);
+                answer += &format!("Discarded tile {}{} ({} tiles)\n", tile.value, get_printable_suit(tile.suit), find_potentially_available_tile_count(&user_state.game_state, 0, &tiles_improving_shanten));
+                if has_potential_for_furiten(&shanten_calculator.best_waits, &user_state.game_state.discards[0]) {
                     answer += "Possible furiten\n";
                 }
             }
             else {
                 answer += "The hand is ready now\n";
-                let wait_tiles = filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
-                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles), find_potentially_available_tile_count(&game, 0, &wait_tiles));
-                if has_furiten_waits(&wait_tiles, &game.discards[0]) {
+                let wait_tiles = filter_tiles_finishing_hand(&user_state.game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
+                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles), find_potentially_available_tile_count(&user_state.game_state, 0, &wait_tiles));
+                if has_furiten_waits(&wait_tiles, &user_state.game_state.discards[0]) {
                     answer += " furiten";
                 }
                 answer += "\n";
@@ -834,8 +902,8 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
         None => { answer += "Could not find the given tile in the hand\n"; },
     }
 
-    if game.hands[0].tiles[13] == EMPTY_TILE {
-        let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13]);
+    if user_state.game_state.hands[0].tiles[13] == EMPTY_TILE {
+        let shanten_calculator = calculate_shanten(&user_state.game_state.hands[0].tiles[0..13]);
         let shanten = shanten_calculator.get_calculated_shanten();
         match discarded_tile {
             Some(tile) => {
@@ -894,7 +962,7 @@ async fn run_telegram_bot() {
 
     let handler = Update::filter_message().endpoint(
         |bot: Bot, user_states: SharedUserStates, message: Message| async move {
-            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: generate_normal_dealed_game(1, true)});
+            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: generate_normal_dealed_game(1, true), previous_move: None});
             let response = process_user_message(user_state, &message);
             bot.send_message(message.chat.id, response).await?;
             respond(())
