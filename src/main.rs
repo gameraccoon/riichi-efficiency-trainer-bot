@@ -57,12 +57,28 @@ struct GameState {
     live_wall: Vec<Tile>,
 }
 
-fn print_hand(hand: &Hand) {
-    println!("{}", get_printable_tiles_set(&hand.tiles));
+#[derive(Debug)]
+enum TileDisplayOption {
+    Text,
+    Unicode,
 }
 
-fn print_hand_unicode(hand: &Hand) {
-    println!("{}", get_printable_tiles_set_unicode(&hand.tiles));
+fn print_hand(hand: &Hand, tile_display: &TileDisplayOption) {
+    println!("{}", get_printable_tiles_set(&hand.tiles, tile_display));
+}
+
+fn get_printable_tiles_set(tiles: &[Tile], tile_display: &TileDisplayOption) -> String {
+    match tile_display {
+        TileDisplayOption::Text => get_printable_tiles_set_text(&tiles),
+        TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&tiles),
+    }
+}
+
+fn tile_to_string(tile: &Tile, tile_display: &TileDisplayOption) -> String {
+    match tile_display {
+        TileDisplayOption::Text => tile.value.to_string() + get_printable_suit(tile.suit),
+        TileDisplayOption::Unicode => TILE_UNICODE[get_tile_index(&tile)].to_string(),
+    }
 }
 
 fn get_tile_index(tile: &Tile) -> usize {
@@ -118,7 +134,7 @@ fn get_suit_from_letter(suit_letter: char) -> Option<Suit> {
     }
 }
 
-fn get_printable_tiles_set(tiles: &[Tile]) -> String {
+fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
     let mut result: String = "".to_string();
 
     let mut last_suit = Suit::Special;
@@ -308,7 +324,7 @@ fn make_frequency_table(tiles: &[Tile]) -> TileFrequencyTable {
 
     for tile in tiles {
         if *tile == EMPTY_TILE {
-            panic!("Incorrect tile in shanten calculation: {}", get_printable_tiles_set(tiles));
+            panic!("Incorrect tile in shanten calculation: {}", get_printable_tiles_set_text(tiles));
         }
         result[get_tile_index(tile)] += 1
     }
@@ -715,16 +731,26 @@ struct PreviousMoveData {
     discarded_tile: Tile,
 }
 
-fn get_move_explanation_text(previous_move: &PreviousMoveData) -> String {
+struct UserSettings {
+    tile_display: TileDisplayOption,
+}
+
+fn get_default_settings() -> UserSettings {
+    UserSettings{
+        tile_display: TileDisplayOption::Text,
+    }
+}
+
+fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &UserSettings) -> String {
     assert!(previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE, "Expected move state hand have 14 tiles before the discard");
 
     let best_discards = calculate_best_discards(&previous_move.game_state, previous_move.hand_index, previous_move.full_hand_shanten);
 
     let mut result = String::new();
     for discard_info in best_discards {
-        result += &format!("{}{}: {} ({} left)\n",
-            discard_info.tile.value, get_printable_suit(discard_info.tile.suit),
-            get_printable_tiles_set(&discard_info.tiles_improving_shanten),
+        result += &format!("{}: {} ({} left)\n",
+            tile_to_string(&discard_info.tile, &user_settings.tile_display),
+            get_printable_tiles_set(&discard_info.tiles_improving_shanten, &user_settings.tile_display),
             discard_info.improvement_tile_count,
         )
     }
@@ -760,7 +786,7 @@ fn play_in_console() {
         let mut should_restart_game = false;
         let mut game = generate_dealed_game_with_hand(1, &predefined_hand, false);
 
-        println!("Dealed hand: {}", get_printable_tiles_set(&game.hands[0].tiles));
+        println!("Dealed hand: {}", get_printable_tiles_set(&game.hands[0].tiles, &TileDisplayOption::Text));
 
         while !should_restart_game && !should_quit_game && !game.live_wall.is_empty() {
             let full_hand_shanten;
@@ -770,27 +796,27 @@ fn play_in_console() {
                 if shanten > 0 {
                     println!("Shanten: {}", shanten);
                     let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten);
-                    println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
+                    println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten, &TileDisplayOption::Text), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
                 }
                 else {
                     println!("The hand is tenpai (ready) now");
-                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits))));
+                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits)), &TileDisplayOption::Text));
                 }
 
                 draw_tile_to_hand(&mut game, 0);
-                println!("Drawn {}{}", game.hands[0].tiles[13].value.to_string(), get_printable_suit(game.hands[0].tiles[13].suit));
+                println!("Drawn {}", tile_to_string(&game.hands[0].tiles[13], &TileDisplayOption::Text));
                 println!("{} tiles left in the live wall", game.live_wall.len());
                 full_hand_shanten = calculate_shanten(&game.hands[0].tiles).get_calculated_shanten();
                 if full_hand_shanten < shanten {
-                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten)));
+                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten), &TileDisplayOption::Text));
                 }
             }
             else {
                 full_hand_shanten = calculate_shanten(&game.hands[0].tiles).get_calculated_shanten();
             }
 
-            print_hand(&game.hands[0]);
-            print_hand_unicode(&game.hands[0]);
+            print_hand(&game.hands[0], &TileDisplayOption::Text);
+            print_hand(&game.hands[0], &TileDisplayOption::Unicode);
 
             if full_hand_shanten < 0 {
                 println!("The hand is complete! Send \"n\" to start new hand, \"q\" to quit, or you can continue discarding tiles");
@@ -839,61 +865,86 @@ fn read_telegram_token() -> String {
 }
 
 struct UserState {
-    game_state: GameState,
+    game_state: Option<GameState>,
     previous_move: Option<PreviousMoveData>,
+    settings: UserSettings,
 }
 
-fn process_user_message(user_state: &mut UserState, message: &Message) -> String {
+fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<String> {
     if message.text().is_none() {
-        return "No message received".to_string();
+        return ["No message received".to_string()].to_vec();
     }
 
     let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
+    let mut settings = &mut user_state.settings;
 
     match *message_text {
         "/start" => {
-            return "Current hand:\n".to_string() + &get_printable_tiles_set(&user_state.game_state.hands[0].tiles);
+            user_state.game_state = Some(generate_normal_dealed_game(1, true));
+            let game_state = &user_state.game_state.as_ref().unwrap();
+            return ["Dealed new hand:\n".to_string() + &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display)].to_vec();
+        },
+        "/hand" => {
+            if user_state.game_state.is_none() {
+                return ["No hand is in progress, send /start to start a new hand".to_string()].to_vec();
+            }
+            let game_state = &user_state.game_state.as_ref().unwrap();
+            return ["Current hand:\n".to_string() + &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display)].to_vec();
         },
         "/explain" => {
             return match &user_state.previous_move {
-                Some(previous_move) => get_move_explanation_text(&previous_move),
-                None => "No moves are recorded to explain".to_string(),
+                Some(previous_move) => [get_move_explanation_text(&previous_move, &settings)].to_vec(),
+                None => ["No moves are recorded to explain".to_string()].to_vec(),
             }
+        },
+        "/display_unicode" => {
+            settings.tile_display = TileDisplayOption::Unicode;
+            return ["Set display style to unicode".to_string()].to_vec()
+        },
+        "/display_text" => {
+            settings.tile_display = TileDisplayOption::Text;
+            return ["Set display style to text".to_string()].to_vec()
         },
         _ => {},
     }
 
-    let requested_tile = get_tile_from_input(message_text);
-    if requested_tile == EMPTY_TILE {
-        return "Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string();
+    if user_state.game_state.is_none() {
+        return ["No hand is in progress, send /start to start a new hand".to_string()].to_vec();
     }
 
-    let full_hand_shanten = calculate_shanten(&user_state.game_state.hands[0].tiles).get_calculated_shanten();
-    let best_discards = get_best_discard_scores(&user_state.game_state, 0, full_hand_shanten);
+    let mut game_state = user_state.game_state.as_mut().unwrap();
+
+    let requested_tile = get_tile_from_input(message_text);
+    if requested_tile == EMPTY_TILE {
+        return ["Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string()].to_vec();
+    }
+
+    let full_hand_shanten = calculate_shanten(&game_state.hands[0].tiles).get_calculated_shanten();
+    let best_discards = get_best_discard_scores(&game_state, 0, full_hand_shanten);
     let mut discarded_tile = None;
 
-    match user_state.game_state.hands[0].tiles.iter().position(|&r| r == requested_tile) {
+    match game_state.hands[0].tiles.iter().position(|&r| r == requested_tile) {
         Some(tile_index_in_hand) => {
-            user_state.previous_move = Some(PreviousMoveData{ game_state: user_state.game_state.clone(), hand_index: 0, full_hand_shanten: full_hand_shanten, discarded_tile: EMPTY_TILE });
-            let tile = discard_tile(&mut user_state.game_state, 0, tile_index_in_hand as usize);
+            user_state.previous_move = Some(PreviousMoveData{ game_state: (*game_state).clone(), hand_index: 0, full_hand_shanten: full_hand_shanten, discarded_tile: EMPTY_TILE });
+            let tile = discard_tile(&mut game_state, 0, tile_index_in_hand as usize);
             discarded_tile = Some(tile);
             user_state.previous_move.as_mut().unwrap().discarded_tile = tile;
-            let shanten_calculator = calculate_shanten(&user_state.game_state.hands[0].tiles[0..13]);
+            let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13]);
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
                 let possible_waits = convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits);
-                let tiles_improving_shanten = filter_tiles_improving_shanten(&user_state.game_state.hands[0].tiles[0..13], &possible_waits, new_shanten);
-                answer += &format!("Discarded tile {}{} ({} tiles)\n", tile.value, get_printable_suit(tile.suit), find_potentially_available_tile_count(&user_state.game_state, 0, &tiles_improving_shanten));
-                if has_potential_for_furiten(&shanten_calculator.best_waits, &user_state.game_state.discards[0]) {
+                let tiles_improving_shanten = filter_tiles_improving_shanten(&game_state.hands[0].tiles[0..13], &possible_waits, new_shanten);
+                answer += &format!("Discarded tile {} ({} tiles)\n", tile_to_string(&tile, &settings.tile_display), find_potentially_available_tile_count(&game_state, 0, &tiles_improving_shanten));
+                if has_potential_for_furiten(&shanten_calculator.best_waits, &game_state.discards[0]) {
                     answer += "Possible furiten\n";
                 }
             }
             else {
                 answer += "The hand is ready now\n";
-                let wait_tiles = filter_tiles_finishing_hand(&user_state.game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
-                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles), find_potentially_available_tile_count(&user_state.game_state, 0, &wait_tiles));
-                if has_furiten_waits(&wait_tiles, &user_state.game_state.discards[0]) {
+                let wait_tiles = filter_tiles_finishing_hand(&game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
+                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles, &settings.tile_display), find_potentially_available_tile_count(&game_state, 0, &wait_tiles));
+                if has_furiten_waits(&wait_tiles, &game_state.discards[0]) {
                     answer += " furiten";
                 }
                 answer += "\n";
@@ -902,8 +953,8 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
         None => { answer += "Could not find the given tile in the hand\n"; },
     }
 
-    if user_state.game_state.hands[0].tiles[13] == EMPTY_TILE {
-        let shanten_calculator = calculate_shanten(&user_state.game_state.hands[0].tiles[0..13]);
+    if game_state.hands[0].tiles[13] == EMPTY_TILE {
+        let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13]);
         let shanten = shanten_calculator.get_calculated_shanten();
         match discarded_tile {
             Some(tile) => {
@@ -915,7 +966,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
                             answer += "Best discard\n"
                         }
                         else {
-                            answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles), best_discards.improvement_tile_count);
+                            answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles, &settings.tile_display), best_discards.improvement_tile_count);
                         }
                     }
                 }
@@ -924,27 +975,25 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> String
                         answer += "Best discard\n"
                     }
                     else {
-                        answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles), best_discards.improvement_tile_count);
+                        answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles, &settings.tile_display), best_discards.improvement_tile_count);
                     }
 
-                    user_state.game_state = generate_normal_dealed_game(1, true);
-                    let game = &mut user_state.game_state;
-                    answer += "\nNew hand:\n";
-                    answer += &get_printable_tiles_set(&game.hands[0].tiles);
-                    return answer;
+                    user_state.game_state = Some(generate_normal_dealed_game(1, true));
+                    let game_state = user_state.game_state.as_ref().unwrap();
+                    return [answer, "New hand:\n".to_string() + &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display)].to_vec();
                 }
             },
             None => panic!("We got 13 tiles but nothing discarded, that is broken"),
         }
 
-        draw_tile_to_hand(&mut user_state.game_state, 0);
-        answer += &format!("Drawn {}{}\n", user_state.game_state.hands[0].tiles[13].value.to_string(), get_printable_suit(user_state.game_state.hands[0].tiles[13].suit));
-        answer += &format!("{} tiles left in the live wall\n", user_state.game_state.live_wall.len());
+        draw_tile_to_hand(&mut game_state, 0);
+        answer += &format!("Drawn {}\n", tile_to_string(&game_state.hands[0].tiles[13], &settings.tile_display));
+        answer += &format!("{} tiles left in the live wall\n", game_state.live_wall.len());
     }
 
-    answer += &get_printable_tiles_set(&user_state.game_state.hands[0].tiles);
+    answer += &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display);
 
-    return answer;
+    return [answer].to_vec();
 }
 
 async fn run_telegram_bot() {
@@ -962,9 +1011,11 @@ async fn run_telegram_bot() {
 
     let handler = Update::filter_message().endpoint(
         |bot: Bot, user_states: SharedUserStates, message: Message| async move {
-            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: generate_normal_dealed_game(1, true), previous_move: None});
-            let response = process_user_message(user_state, &message);
-            bot.send_message(message.chat.id, response).await?;
+            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: None, previous_move: None, settings: get_default_settings()});
+            let responses = process_user_message(user_state, &message);
+            for response in responses {
+                bot.send_message(message.chat.id, response).await?;
+            }
             respond(())
         },
     );
