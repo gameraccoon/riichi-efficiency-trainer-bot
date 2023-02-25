@@ -4,6 +4,7 @@ use crate::rand::prelude::SliceRandom;
 use dashmap::DashMap;
 use rand::thread_rng;
 use std::cmp::max;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::sync::Arc;
@@ -551,21 +552,108 @@ fn discard_tile(game: &mut GameState, hand_index: usize, tile_index: usize) -> T
 }
 
 fn get_tile_from_input(input: &str) -> Tile {
-    if input.len() != 2 {
-        return EMPTY_TILE;
+    // this is very stupid but it seems Rust doesn't yet support initializing constants like this
+    let tile_names: HashMap<&str, Tile> = HashMap::from([
+        ("east", Tile{suit: Suit::Special, value: 1}),
+        ("south", Tile{suit: Suit::Special, value: 2}),
+        ("west", Tile{suit: Suit::Special, value: 3}),
+        ("north", Tile{suit: Suit::Special, value: 4}),
+        ("white", Tile{suit: Suit::Special, value: 5}),
+        ("green", Tile{suit: Suit::Special, value: 6}),
+        ("red", Tile{suit: Suit::Special, value: 7}),
+        ("ton", Tile{suit: Suit::Special, value: 1}),
+        ("nan", Tile{suit: Suit::Special, value: 2}),
+        ("shaa", Tile{suit: Suit::Special, value: 3}),
+        ("pei", Tile{suit: Suit::Special, value: 4}),
+        ("haku", Tile{suit: Suit::Special, value: 5}),
+        ("hatsu", Tile{suit: Suit::Special, value: 6}),
+        ("chun", Tile{suit: Suit::Special, value: 7}),
+    ]);
+
+    let suit_names: HashMap<&str, Suit> = HashMap::from([
+        ("man", Suit::Man),
+        ("wan", Suit::Man),
+        ("pin", Suit::Pin),
+        ("sou", Suit::Sou),
+    ]);
+
+    let values_names: HashMap<&str, u8> = HashMap::from([
+        ("1", 1),
+        ("2", 2),
+        ("3", 3),
+        ("4", 4),
+        ("5", 5),
+        ("6", 6),
+        ("7", 7),
+        ("8", 8),
+        ("9", 9),
+        ("one", 1),
+        ("two", 2),
+        ("three", 3),
+        ("four", 4),
+        ("five", 5),
+        ("six", 6),
+        ("seven", 7),
+        ("eight", 8),
+        ("nine", 9),
+        ("ii", 1),
+        ("ryan", 2),
+        ("san", 3),
+        ("suu", 4),
+        ("uu", 5),
+        ("rou", 6),
+        ("chii", 7),
+        ("paa", 8),
+        ("kyuu", 9),
+    ]);
+
+    if input.len() == 2 {
+        let suit = get_suit_from_letter(input.chars().nth(1).unwrap());
+        if suit.is_none() {
+            return EMPTY_TILE;
+        }
+
+        let value: u8 = input[0..1].parse().unwrap_or(255);
+        if value == 255 {
+            return EMPTY_TILE;
+        }
+
+        return Tile{suit:suit.unwrap(), value:value};
+    }
+    else if input.contains(" ") {
+        let mut parts = Vec::with_capacity(2);
+        let mut count = 0;
+        for part in input.split_whitespace() {
+            if count >= 2 {
+                return EMPTY_TILE;
+            }
+            count += 1;
+
+            parts.push(part.clone());
+        }
+        if parts.len() != 2 {
+            return EMPTY_TILE;
+        }
+
+        let value: u8;
+        match values_names.get(parts[0]) {
+            Some(found_value) => value = *found_value,
+            None => return EMPTY_TILE,
+        }
+
+        let suit: Suit;
+        match suit_names.get(parts[1]) {
+            Some(found_suit) => suit = *found_suit,
+            None => return EMPTY_TILE,
+        }
+
+        return Tile{suit: suit, value: value};
     }
 
-    let suit = get_suit_from_letter(input.chars().nth(1).unwrap());
-    if suit.is_none() {
-        return EMPTY_TILE;
+    return match tile_names.get(input) {
+        Some(found_tile) => *found_tile,
+        None => EMPTY_TILE,
     }
-
-    let value: u8 = input[0..1].parse().unwrap_or(255);
-    if value == 255 {
-        return EMPTY_TILE;
-    }
-
-    return Tile{suit:suit.unwrap(), value:value};
 }
 
 fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Tile> {
@@ -846,7 +934,7 @@ fn play_in_console() {
                 println!("Quitting");
             }
             else {
-                let requested_tile = get_tile_from_input(&input);
+                let requested_tile = get_tile_from_input(&input.to_lowercase());
                 if requested_tile == EMPTY_TILE {
                     println!("Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"");
                 }
@@ -915,7 +1003,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
 
     let mut game_state = user_state.game_state.as_mut().unwrap();
 
-    let requested_tile = get_tile_from_input(message_text);
+    let requested_tile = get_tile_from_input(&message_text.to_lowercase());
     if requested_tile == EMPTY_TILE {
         return ["Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string()].to_vec();
     }
