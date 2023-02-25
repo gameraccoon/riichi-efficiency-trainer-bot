@@ -405,7 +405,8 @@ impl ShantenCalculator {
             let current_shanten = (8 - (self.complete_sets * 2) - self.partial_sets - self.pair) as i8;
             if current_shanten < self.best_shanten {
                 self.best_shanten = current_shanten;
-                self.best_waits = self.waits_table.clone();
+                self.best_waits = EMPTY_FREQUENCY_TABLE;
+                append_frequency_table(&mut self.best_waits, &self.waits_table);
                 self.append_single_tiles_left();
             }
             else if current_shanten == self.best_shanten {
@@ -500,7 +501,7 @@ impl ShantenCalculator {
         self.remove_completed_sets(i + 1);
     }
 
-    fn calculate_shanten(&mut self) {
+    fn calculate_shanten_standard(&mut self) {
         for i in 0..self.hand_table.len() {
             if self.hand_table[i] >= 2 {
                 self.pair += 1;
@@ -516,12 +517,93 @@ impl ShantenCalculator {
         self.remove_completed_sets(0);
     }
 
+    fn calculate_shanten_chiitoitsu(&mut self) {
+        let mut pair_count = 0;
+        let mut unique_tile_count = 0;
+
+        for i in 0..self.hand_table.len() {
+            if self.hand_table[i] == 0 { continue };
+
+            unique_tile_count += 1;
+
+            if self.hand_table[i] >= 2 {
+                pair_count += 1;
+            }
+            else {
+                self.waits_table[i] += 2;
+            }
+        }
+
+        let mut shanten = 6 - pair_count;
+
+        if unique_tile_count < 7 {
+            shanten += 7 - unique_tile_count;
+        }
+
+        if shanten < self.best_shanten {
+            self.best_shanten = shanten;
+            self.best_waits = EMPTY_FREQUENCY_TABLE;
+            append_frequency_table(&mut self.best_waits, &self.waits_table);
+        }
+        else if shanten == self.best_shanten {
+            append_frequency_table(&mut self.best_waits, &self.waits_table);
+        }
+        self.waits_table = EMPTY_FREQUENCY_TABLE;
+    }
+
+    fn calculate_shanten_kokushi(&mut self) -> i8 {
+        let mut unique_tile_count = 0;
+        let mut have_pair = false;
+
+        const TERMINALS_AND_HONORS_IDX: [usize; 13] = [0, 8, 10, 18, 20, 28, 30, 31, 32, 33, 34, 35, 36];
+
+        for i in TERMINALS_AND_HONORS_IDX {
+            if self.hand_table[i] != 0 {
+                unique_tile_count += 1;
+
+                if self.hand_table[i] >= 2 {
+                    have_pair = true;
+                }
+                else {
+                    self.waits_table[i] += 1;
+                }
+            }
+            else {
+                self.waits_table[i] += 2;
+            }
+        }
+
+        let shanten = 13 - unique_tile_count - (have_pair as i8);
+
+        if shanten < self.best_shanten {
+            self.best_shanten = shanten;
+            self.best_waits = EMPTY_FREQUENCY_TABLE;
+
+            if have_pair {
+                // eliminate improvements to make a pair
+                for i in TERMINALS_AND_HONORS_IDX {
+                    if self.waits_table[i] == 1 {
+                        self.waits_table[i] = 0;
+                    }
+                }
+            }
+
+            append_frequency_table(&mut self.best_waits, &self.waits_table);
+        }
+        else if shanten == self.best_shanten {
+            append_frequency_table(&mut self.best_waits, &self.waits_table);
+        }
+        self.waits_table = EMPTY_FREQUENCY_TABLE;
+
+        return shanten;
+    }
+
     pub fn get_calculated_shanten(&self) -> i8 {
         return self.best_shanten;
     }
 }
 
-fn calculate_shanten(tiles: &[Tile]) -> ShantenCalculator {
+fn calculate_shanten(tiles: &[Tile], settings: &UserSettings) -> ShantenCalculator {
     let mut calculator = ShantenCalculator{
         hand_table: make_frequency_table(&tiles),
         waits_table: EMPTY_FREQUENCY_TABLE,
@@ -531,7 +613,26 @@ fn calculate_shanten(tiles: &[Tile]) -> ShantenCalculator {
         best_shanten: MAX_SHANTEN,
         best_waits: EMPTY_FREQUENCY_TABLE,
     };
-    calculator.calculate_shanten();
+
+    if settings.allow_chiitoitsu {
+        calculator.calculate_shanten_chiitoitsu();
+
+        if calculator.get_calculated_shanten() < 0 {
+            return calculator;
+        }
+    }
+
+    if settings.allow_kokushi {
+        let shanten_kokushi = calculator.calculate_shanten_kokushi();
+
+        // if a hand has a kokushi shanten of 3 or less, it cannot possibly be closer to a standard hand
+        if shanten_kokushi < 3 {
+            return calculator;
+        }
+    }
+
+    calculator.calculate_shanten_standard();
+
     return calculator;
 }
 
@@ -656,7 +757,7 @@ fn get_tile_from_input(input: &str) -> Tile {
     }
 }
 
-fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Tile> {
+fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8, user_settings: &UserSettings) -> Vec<Tile> {
     assert!(tiles.len() == 14, "get_discards_reducing_shanten is expected to be called on 14 tiles");
 
     let mut result = Vec::with_capacity(tiles.len());
@@ -669,7 +770,7 @@ fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8) -> Vec<Til
         let mut reduced_tiles = tiles.to_vec();
         reduced_tiles.remove(i);
 
-        let calculator = calculate_shanten(&reduced_tiles);
+        let calculator = calculate_shanten(&reduced_tiles, &user_settings);
 
         if calculator.get_calculated_shanten() < current_shanten {
             result.push(tiles[i]);
@@ -698,7 +799,7 @@ fn find_potentially_available_tile_count(game: &GameState, visible_hand_index: u
     return result;
 }
 
-fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_shanten: i8) -> Vec<Tile> {
+fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_shanten: i8, user_settings: &UserSettings) -> Vec<Tile> {
     assert!(hand_tiles.len() == 13, "filter_tiles_improving_shanten is expected to be called on 13 tiles");
 
     let mut extended_hand = [hand_tiles.to_vec(), [EMPTY_TILE].to_vec()].concat();
@@ -708,7 +809,7 @@ fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_s
     for i in 0..tiles.len() {
         extended_hand[13] = tiles[i];
 
-        let calculator = calculate_shanten(&extended_hand);
+        let calculator = calculate_shanten(&extended_hand, &user_settings);
 
         if calculator.get_calculated_shanten() < current_shanten {
             result.push(tiles[i]);
@@ -718,7 +819,7 @@ fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_s
     return result;
 }
 
-fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile]) -> Vec<Tile> {
+fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile], user_settings: &UserSettings) -> Vec<Tile> {
     assert!(hand_tiles.len() == 13, "filter_tiles_improving_shanten is expected to be called on 13 tiles");
 
     let mut extended_hand = [hand_tiles.to_vec(), [EMPTY_TILE].to_vec()].concat();
@@ -728,7 +829,7 @@ fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile]) -> Vec<Tile>
     for i in 0..tiles.len() {
         extended_hand[13] = tiles[i];
 
-        let calculator = calculate_shanten(&extended_hand);
+        let calculator = calculate_shanten(&extended_hand, &user_settings);
 
         if calculator.get_calculated_shanten() < 0 {
             result.push(tiles[i]);
@@ -744,7 +845,7 @@ struct WeightedDiscard {
     improvement_tile_count: u8,
 }
 
-fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten: i8) -> Vec<WeightedDiscard> {
+fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> Vec<WeightedDiscard> {
     assert!(game.hands[hand_index].tiles[13] != EMPTY_TILE, "calculate_best_discards expected hand with 14 tiles");
 
     let mut possible_discards = Vec::with_capacity(14);
@@ -757,10 +858,10 @@ fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten:
         let mut reduced_tiles = game.hands[hand_index].tiles.to_vec();
         reduced_tiles.remove(i);
 
-        let calculator = calculate_shanten(&reduced_tiles);
+        let calculator = calculate_shanten(&reduced_tiles, &user_settings);
 
         if calculator.get_calculated_shanten() == minimal_shanten {
-            let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten);
+            let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten, &user_settings);
             let available_tiles = find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten);
             possible_discards.push(WeightedDiscard{
                 tile: game.hands[hand_index].tiles[i],
@@ -795,8 +896,8 @@ struct DiscardScores {
     improvement_tile_count: u8,
 }
 
-fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten: i8) -> DiscardScores {
-    let best_discards = calculate_best_discards(&game, hand_index, minimal_shanten);
+fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> DiscardScores {
+    let best_discards = calculate_best_discards(&game, hand_index, minimal_shanten, &user_settings);
     if !best_discards.is_empty() {
         let mut result = DiscardScores{ tiles: Vec::new(), improvement_tile_count: best_discards[0].improvement_tile_count };
         for tile_info in best_discards {
@@ -821,18 +922,22 @@ struct PreviousMoveData {
 
 struct UserSettings {
     tile_display: TileDisplayOption,
+    allow_kokushi: bool,
+    allow_chiitoitsu: bool,
 }
 
 fn get_default_settings() -> UserSettings {
     UserSettings{
         tile_display: TileDisplayOption::Text,
+        allow_kokushi: true,
+        allow_chiitoitsu: true,
     }
 }
 
 fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &UserSettings) -> String {
     assert!(previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE, "Expected move state hand have 14 tiles before the discard");
 
-    let best_discards = calculate_best_discards(&previous_move.game_state, previous_move.hand_index, previous_move.full_hand_shanten);
+    let best_discards = calculate_best_discards(&previous_move.game_state, previous_move.hand_index, previous_move.full_hand_shanten, &user_settings);
 
     let mut result = String::new();
     for discard_info in best_discards {
@@ -869,6 +974,7 @@ fn has_potential_for_furiten(waits_table: &TileFrequencyTable, discards: &Vec<Ti
 fn play_in_console() {
     let mut should_quit_game = false;
     let mut predefined_hand: String = "".to_string();
+    let user_settings = get_default_settings();
 
     while !should_quit_game {
         let mut should_restart_game = false;
@@ -879,28 +985,28 @@ fn play_in_console() {
         while !should_restart_game && !should_quit_game && !game.live_wall.is_empty() {
             let full_hand_shanten;
             if game.hands[0].tiles[13] == EMPTY_TILE {
-                let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13]);
+                let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13], &user_settings);
                 let shanten = shanten_calculator.get_calculated_shanten();
                 if shanten > 0 {
                     println!("Shanten: {}", shanten);
-                    let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten);
+                    let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten, &user_settings);
                     println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten, &TileDisplayOption::Text), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
                 }
                 else {
                     println!("The hand is tenpai (ready) now");
-                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits)), &TileDisplayOption::Text));
+                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &user_settings), &TileDisplayOption::Text));
                 }
 
                 draw_tile_to_hand(&mut game, 0);
                 println!("Drawn {}", tile_to_string(&game.hands[0].tiles[13], &TileDisplayOption::Text));
                 println!("{} tiles left in the live wall", game.live_wall.len());
-                full_hand_shanten = calculate_shanten(&game.hands[0].tiles).get_calculated_shanten();
+                full_hand_shanten = calculate_shanten(&game.hands[0].tiles, &user_settings).get_calculated_shanten();
                 if full_hand_shanten < shanten {
-                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten), &TileDisplayOption::Text));
+                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten, &user_settings), &TileDisplayOption::Text));
                 }
             }
             else {
-                full_hand_shanten = calculate_shanten(&game.hands[0].tiles).get_calculated_shanten();
+                full_hand_shanten = calculate_shanten(&game.hands[0].tiles, &user_settings).get_calculated_shanten();
             }
 
             print_hand(&game.hands[0], &TileDisplayOption::Text);
@@ -994,6 +1100,14 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
             settings.tile_display = TileDisplayOption::Text;
             return ["Set display style to text".to_string()].to_vec()
         },
+        "/toggle_kokushi" => {
+            settings.allow_kokushi = !settings.allow_kokushi;
+            return [format!("Kokushi musou is now {}counted for shanten calculation",  if settings.allow_kokushi {""} else {"not "})].to_vec()
+        },
+        "/toggle_chiitoi" => {
+            settings.allow_chiitoitsu = !settings.allow_chiitoitsu;
+            return [format!("Chiitoitsu is now {}counted for shanten calculation", if settings.allow_chiitoitsu {""} else {"not "})].to_vec()
+        },
         _ => {},
     }
 
@@ -1008,8 +1122,8 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
         return ["Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string()].to_vec();
     }
 
-    let full_hand_shanten = calculate_shanten(&game_state.hands[0].tiles).get_calculated_shanten();
-    let best_discards = get_best_discard_scores(&game_state, 0, full_hand_shanten);
+    let full_hand_shanten = calculate_shanten(&game_state.hands[0].tiles, &settings).get_calculated_shanten();
+    let best_discards = get_best_discard_scores(&game_state, 0, full_hand_shanten, &settings);
     let mut discarded_tile = None;
 
     match game_state.hands[0].tiles.iter().position(|&r| r == requested_tile) {
@@ -1018,11 +1132,11 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
             let tile = discard_tile(&mut game_state, 0, tile_index_in_hand as usize);
             discarded_tile = Some(tile);
             user_state.previous_move.as_mut().unwrap().discarded_tile = tile;
-            let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13]);
+            let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13], &settings);
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
                 let possible_waits = convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits);
-                let tiles_improving_shanten = filter_tiles_improving_shanten(&game_state.hands[0].tiles[0..13], &possible_waits, new_shanten);
+                let tiles_improving_shanten = filter_tiles_improving_shanten(&game_state.hands[0].tiles[0..13], &possible_waits, new_shanten, &settings);
                 answer += &format!("Discarded tile {} ({} tiles)\n", tile_to_string(&tile, &settings.tile_display), find_potentially_available_tile_count(&game_state, 0, &tiles_improving_shanten));
                 if has_potential_for_furiten(&shanten_calculator.best_waits, &game_state.discards[0]) {
                     answer += "Possible furiten\n";
@@ -1030,7 +1144,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
             }
             else {
                 answer += "The hand is ready now\n";
-                let wait_tiles = filter_tiles_finishing_hand(&game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits));
+                let wait_tiles = filter_tiles_finishing_hand(&game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &settings);
                 answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles, &settings.tile_display), find_potentially_available_tile_count(&game_state, 0, &wait_tiles));
                 if has_furiten_waits(&wait_tiles, &game_state.discards[0]) {
                     answer += " furiten";
@@ -1042,7 +1156,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
     }
 
     if game_state.hands[0].tiles[13] == EMPTY_TILE {
-        let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13]);
+        let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13], &settings);
         let shanten = shanten_calculator.get_calculated_shanten();
         match discarded_tile {
             Some(tile) => {
