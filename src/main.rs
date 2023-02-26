@@ -872,17 +872,20 @@ struct WeightedDiscard {
     improvement_tile_count: u8,
 }
 
-fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> Vec<WeightedDiscard> {
+fn calculate_best_discards_ukeire1(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> Vec<WeightedDiscard> {
     assert!(game.hands[hand_index].tiles[13] != EMPTY_TILE, "calculate_best_discards expected hand with 14 tiles");
 
     let mut possible_discards = Vec::with_capacity(14);
     let mut previous_tile = EMPTY_TILE;
+    let mut full_hand = game.hands[hand_index].tiles.to_vec();
+    full_hand.sort();
+    let full_hand = full_hand;
 
-    for i in 0..14 {
-        if game.hands[hand_index].tiles[i] == previous_tile {
+    for i in 0..full_hand.len() {
+        if full_hand[i] == previous_tile {
             continue;
         }
-        let mut reduced_tiles = game.hands[hand_index].tiles.to_vec();
+        let mut reduced_tiles = full_hand.clone();
         reduced_tiles.remove(i);
 
         let calculator = calculate_shanten(&reduced_tiles, &user_settings);
@@ -891,13 +894,13 @@ fn calculate_best_discards(game: &GameState, hand_index: usize, minimal_shanten:
             let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten, &user_settings);
             let available_tiles = find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten);
             possible_discards.push(WeightedDiscard{
-                tile: game.hands[hand_index].tiles[i],
+                tile: full_hand[i],
                 tiles_improving_shanten: tiles_improving_shanten,
                 improvement_tile_count: available_tiles,
             });
         }
 
-        previous_tile = game.hands[hand_index].tiles[i];
+        previous_tile = full_hand[i];
     }
 
     possible_discards.sort_by(|a: &WeightedDiscard, b: &WeightedDiscard| {
@@ -924,10 +927,11 @@ struct DiscardScores {
 }
 
 fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> DiscardScores {
-    let best_discards = calculate_best_discards(&game, hand_index, minimal_shanten, &user_settings);
-    if !best_discards.is_empty() {
-        let mut result = DiscardScores{ tiles: Vec::new(), improvement_tile_count: best_discards[0].improvement_tile_count };
-        for tile_info in best_discards {
+    let best_discards_ukeire1 = calculate_best_discards_ukeire1(&game, hand_index, minimal_shanten, &user_settings);
+
+    if !best_discards_ukeire1.is_empty() {
+        let mut result = DiscardScores{ tiles: Vec::new(), improvement_tile_count: best_discards_ukeire1[0].improvement_tile_count };
+        for tile_info in best_discards_ukeire1 {
             if tile_info.improvement_tile_count < result.improvement_tile_count {
                 break;
             }
@@ -964,10 +968,10 @@ fn get_default_settings() -> UserSettings {
 fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &UserSettings) -> String {
     assert!(previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE, "Expected move state hand have 14 tiles before the discard");
 
-    let best_discards = calculate_best_discards(&previous_move.game_state, previous_move.hand_index, previous_move.full_hand_shanten, &user_settings);
+    let best_discards_ukeire1 = calculate_best_discards_ukeire1(&previous_move.game_state, previous_move.hand_index, previous_move.full_hand_shanten, &user_settings);
 
     let mut result = String::new();
-    for discard_info in best_discards {
+    for discard_info in best_discards_ukeire1 {
         result += &format!("{}: {} ({} left)\n",
             tile_to_string(&discard_info.tile, &user_settings.tile_display),
             get_printable_tiles_set(&discard_info.tiles_improving_shanten, &user_settings.tile_display),
