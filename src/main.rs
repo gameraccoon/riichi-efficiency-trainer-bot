@@ -55,25 +55,26 @@ struct GameState {
     total_discards_table: TileFrequencyTable,
     _dead_wall: DeadWall,
     dora_indicators: [Tile; 8], // 1-3 - dora indicators, 4-7 - uradora indicators
+    opened_dora_indicators: u8,
     live_wall: Vec<Tile>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum TileDisplayOption {
     Text,
     Unicode,
     UrlImage,
 }
 
-fn print_hand(hand: &Hand, tile_display: &TileDisplayOption) {
+fn print_hand(hand: &Hand, tile_display: TileDisplayOption) {
     println!("{}", get_printable_tiles_set(&hand.tiles, tile_display));
 }
 
-fn get_printable_hand(hand: &Hand, tile_display: &TileDisplayOption) -> String {
-    get_printable_tiles_set_main(&hand.tiles, &tile_display)
+fn get_printable_hand(hand: &Hand, tile_display: TileDisplayOption) -> String {
+    get_printable_tiles_set_main(&hand.tiles, tile_display)
 }
 
-fn get_printable_tiles_set_main(tiles: &[Tile], tile_display: &TileDisplayOption) -> String {
+fn get_printable_tiles_set_main(tiles: &[Tile], tile_display: TileDisplayOption) -> String {
     match tile_display {
         TileDisplayOption::Text => get_printable_tiles_set_text(&tiles),
         TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&tiles),
@@ -81,7 +82,7 @@ fn get_printable_tiles_set_main(tiles: &[Tile], tile_display: &TileDisplayOption
     }
 }
 
-fn get_printable_tiles_set(tiles: &[Tile], tile_display: &TileDisplayOption) -> String {
+fn get_printable_tiles_set(tiles: &[Tile], tile_display: TileDisplayOption) -> String {
     match tile_display {
         TileDisplayOption::Text => get_printable_tiles_set_text(&tiles),
         TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&tiles),
@@ -138,7 +139,7 @@ fn get_printable_tiles_set_url_image(tiles: &[Tile]) -> String {
     return "https://api.tempai.net/image/".to_string() + &get_printable_tiles_set_text(&tiles) + ".png";
 }
 
-fn tile_to_string(tile: &Tile, tile_display: &TileDisplayOption) -> String {
+fn tile_to_string(tile: &Tile, tile_display: TileDisplayOption) -> String {
     match tile_display {
         TileDisplayOption::Text => tile.value.to_string() + get_printable_suit(tile.suit),
         TileDisplayOption::Unicode => TILE_UNICODE[get_tile_index(&tile)].to_string(),
@@ -247,6 +248,7 @@ fn generate_normal_dealed_game(player_count: u32, deal_first_tile: bool) -> Game
         total_discards_table: EMPTY_FREQUENCY_TABLE,
         _dead_wall: dead_wall,
         dora_indicators: dora_indicators,
+        opened_dora_indicators: 1,
         live_wall: tiles
     };
 
@@ -337,6 +339,7 @@ fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str, deal_fir
         total_discards_table: EMPTY_FREQUENCY_TABLE,
         _dead_wall: dead_wall,
         dora_indicators: dora_indicators,
+        opened_dora_indicators: 1,
         live_wall: tiles,
     };
 
@@ -808,7 +811,21 @@ fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8, user_setti
     return result;
 }
 
-fn find_potentially_available_tile_count(game: &GameState, visible_hand_index: usize, tiles: &[Tile]) -> u8 {
+fn get_visible_tiles(game: &GameState, visible_hand_index: usize) -> TileFrequencyTable {
+    let mut result = game.total_discards_table.clone();
+
+    for tile in game.hands[visible_hand_index].tiles {
+        result[get_tile_index(&tile)] += 1;
+    }
+
+    for i in 0..game.opened_dora_indicators {
+        result[get_tile_index(&game.dora_indicators[i as usize])] += 1;
+    }
+
+    return result;
+}
+
+fn find_potentially_available_tile_count(visible_tiles: &TileFrequencyTable, tiles: &[Tile]) -> u8 {
     let mut result = 0;
     let mut previous_tile = EMPTY_TILE;
     for tile in tiles {
@@ -816,10 +833,7 @@ fn find_potentially_available_tile_count(game: &GameState, visible_hand_index: u
             continue;
         }
 
-        result += 4
-                -(game.total_discards_table[get_tile_index(tile)] as u8)
-                -(game.hands[visible_hand_index].tiles.iter().filter(|&t| *t == *tile).count() as u8)
-                -(if game.dora_indicators[0] == *tile {1} else {0});
+        result += 4 - visible_tiles[get_tile_index(tile)];
         previous_tile = *tile;
     }
 
@@ -869,15 +883,31 @@ fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile], user_setting
 struct WeightedDiscard {
     tile: Tile,
     tiles_improving_shanten: Vec<Tile>,
-    improvement_tile_count: u8,
+    score: u32,
 }
 
-fn calculate_best_discards_ukeire1(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> Vec<WeightedDiscard> {
-    assert!(game.hands[hand_index].tiles[13] != EMPTY_TILE, "calculate_best_discards expected hand with 14 tiles");
+fn sort_weighted_discards(weighted_discards: &mut [WeightedDiscard]) {
+    weighted_discards.sort_by(|a: &WeightedDiscard, b: &WeightedDiscard| {
+        if a.score > b.score
+        {
+            std::cmp::Ordering::Less
+        }
+        else if a.score < b.score
+        {
+            std::cmp::Ordering::Greater
+        }
+        else {
+            std::cmp::Ordering::Equal
+        }
+    });
+}
+
+fn calculate_best_discards_ukeire1(hand_tiles: &[Tile], minimal_shanten: i8, visible_tiles: &TileFrequencyTable, user_settings: &UserSettings) -> Vec<WeightedDiscard> {
+    assert!(hand_tiles[13] != EMPTY_TILE, "calculate_best_discards_ukeire1 expected hand with 14 tiles");
 
     let mut possible_discards = Vec::with_capacity(14);
     let mut previous_tile = EMPTY_TILE;
-    let mut full_hand = game.hands[hand_index].tiles.to_vec();
+    let mut full_hand = hand_tiles.to_vec();
     full_hand.sort();
     let full_hand = full_hand;
 
@@ -892,30 +922,76 @@ fn calculate_best_discards_ukeire1(game: &GameState, hand_index: usize, minimal_
 
         if calculator.get_calculated_shanten() == minimal_shanten {
             let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten, &user_settings);
-            let available_tiles = find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten);
+            let available_tiles = find_potentially_available_tile_count(&visible_tiles, &tiles_improving_shanten);
+            if available_tiles > 0 {
+                possible_discards.push(WeightedDiscard{
+                    tile: full_hand[i],
+                    tiles_improving_shanten: tiles_improving_shanten,
+                    score: available_tiles as u32,
+                });
+            }
+        }
+
+        previous_tile = full_hand[i];
+    }
+
+    sort_weighted_discards(&mut possible_discards);
+
+    return possible_discards;
+}
+
+fn calculate_best_discards_ukeire2(hand_tiles: &[Tile], minimal_shanten: i8, visible_tiles: &mut TileFrequencyTable, user_settings: &UserSettings) -> Vec<WeightedDiscard> {
+    assert!(hand_tiles[13] != EMPTY_TILE, "calculate_best_discards_ukeire2 expected hand with 14 tiles");
+
+    if minimal_shanten <= 1 {
+        return calculate_best_discards_ukeire1(&hand_tiles, minimal_shanten, &visible_tiles, &user_settings);
+    }
+
+    let mut possible_discards = Vec::with_capacity(14);
+    let mut previous_tile = EMPTY_TILE;
+    let mut full_hand = hand_tiles.to_vec();
+    full_hand.sort();
+    let full_hand = full_hand;
+
+    for i in 0..full_hand.len() {
+        if full_hand[i] == previous_tile {
+            continue;
+        }
+        let mut reduced_tiles = full_hand.clone();
+        reduced_tiles.remove(i);
+
+        let calculator = calculate_shanten(&reduced_tiles, &user_settings);
+
+        if calculator.get_calculated_shanten() == minimal_shanten {
+            let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten, &user_settings);
+            let mut score: u32 = 0;
+            for tile in &tiles_improving_shanten {
+                let tile_index = get_tile_index(tile);
+                let available_tiles = 4 - visible_tiles[tile_index];
+                if available_tiles == 0 {
+                    continue;
+                }
+                reduced_tiles.push(*tile);
+                visible_tiles[tile_index] += 1;
+                let weighted_discards = calculate_best_discards_ukeire1(&reduced_tiles, minimal_shanten - 1, visible_tiles, user_settings);
+                if !weighted_discards.is_empty() {
+                    score += weighted_discards[0].score * (available_tiles as u32);
+                }
+                visible_tiles[tile_index] -= 1;
+                reduced_tiles.pop();
+            }
+
             possible_discards.push(WeightedDiscard{
                 tile: full_hand[i],
                 tiles_improving_shanten: tiles_improving_shanten,
-                improvement_tile_count: available_tiles,
+                score: score,
             });
         }
 
         previous_tile = full_hand[i];
     }
 
-    possible_discards.sort_by(|a: &WeightedDiscard, b: &WeightedDiscard| {
-        if a.improvement_tile_count > b.improvement_tile_count
-        {
-            std::cmp::Ordering::Less
-        }
-        else if a.improvement_tile_count < b.improvement_tile_count
-        {
-            std::cmp::Ordering::Greater
-        }
-        else {
-            std::cmp::Ordering::Equal
-        }
-    });
+    sort_weighted_discards(&mut possible_discards);
 
     return possible_discards;
 }
@@ -923,16 +999,17 @@ fn calculate_best_discards_ukeire1(game: &GameState, hand_index: usize, minimal_
 #[derive(Clone)]
 struct DiscardScores {
     tiles: Vec<Tile>,
-    improvement_tile_count: u8,
+    score: u32,
 }
 
 fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> DiscardScores {
-    let best_discards_ukeire1 = calculate_best_discards_ukeire1(&game, hand_index, minimal_shanten, &user_settings);
+    let mut visible_tiles = get_visible_tiles(game, hand_index);
+    let best_discards = calculate_best_discards_ukeire2(&game.hands[hand_index].tiles, minimal_shanten, &mut visible_tiles, &user_settings);
 
-    if !best_discards_ukeire1.is_empty() {
-        let mut result = DiscardScores{ tiles: Vec::new(), improvement_tile_count: best_discards_ukeire1[0].improvement_tile_count };
-        for tile_info in best_discards_ukeire1 {
-            if tile_info.improvement_tile_count < result.improvement_tile_count {
+    if !best_discards.is_empty() {
+        let mut result = DiscardScores{ tiles: Vec::new(), score: best_discards[0].score };
+        for tile_info in best_discards {
+            if tile_info.score < result.score {
                 break;
             }
 
@@ -941,7 +1018,7 @@ fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten:
         return result;
     }
 
-    return DiscardScores{ tiles: Vec::new(), improvement_tile_count: 0 };
+    return DiscardScores{ tiles: Vec::new(), score: 0 };
 }
 
 struct PreviousMoveData {
@@ -968,14 +1045,15 @@ fn get_default_settings() -> UserSettings {
 fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &UserSettings) -> String {
     assert!(previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE, "Expected move state hand have 14 tiles before the discard");
 
-    let best_discards_ukeire1 = calculate_best_discards_ukeire1(&previous_move.game_state, previous_move.hand_index, previous_move.full_hand_shanten, &user_settings);
+    let mut visible_tiles = get_visible_tiles(&previous_move.game_state, previous_move.hand_index);
+    let best_discards = calculate_best_discards_ukeire2(&previous_move.game_state.hands[previous_move.hand_index].tiles, previous_move.full_hand_shanten, &mut visible_tiles, &user_settings);
 
     let mut result = String::new();
-    for discard_info in best_discards_ukeire1 {
-        result += &format!("{}: {} ({} left)\n",
-            tile_to_string(&discard_info.tile, &user_settings.tile_display),
-            get_printable_tiles_set(&discard_info.tiles_improving_shanten, &user_settings.tile_display),
-            discard_info.improvement_tile_count,
+    for discard_info in best_discards {
+        result += &format!("{}: {} (score {})\n",
+            tile_to_string(&discard_info.tile, user_settings.tile_display),
+            get_printable_tiles_set(&discard_info.tiles_improving_shanten, user_settings.tile_display),
+            discard_info.score,
         )
     }
     return result;
@@ -1011,7 +1089,7 @@ fn play_in_console() {
         let mut should_restart_game = false;
         let mut game = generate_dealed_game_with_hand(1, &predefined_hand, false);
 
-        println!("Dealed hand: {}", get_printable_hand(&game.hands[0], &TileDisplayOption::Text));
+        println!("Dealed hand: {}", get_printable_hand(&game.hands[0], TileDisplayOption::Text));
 
         while !should_restart_game && !should_quit_game && !game.live_wall.is_empty() {
             let full_hand_shanten;
@@ -1021,27 +1099,27 @@ fn play_in_console() {
                 if shanten > 0 {
                     println!("Shanten: {}", shanten);
                     let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten, &user_settings);
-                    println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten, &TileDisplayOption::Text), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
+                    println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten, TileDisplayOption::Text), find_potentially_available_tile_count(&get_visible_tiles(&game, 0), &tiles_improving_shanten));
                 }
                 else {
                     println!("The hand is ready now");
-                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &user_settings), &TileDisplayOption::Text));
+                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &user_settings), TileDisplayOption::Text));
                 }
 
                 draw_tile_to_hand(&mut game, 0);
-                println!("Drawn {}", tile_to_string(&game.hands[0].tiles[13], &TileDisplayOption::Text));
+                println!("Drawn {}", tile_to_string(&game.hands[0].tiles[13], TileDisplayOption::Text));
                 println!("{} tiles left in the live wall", game.live_wall.len());
                 full_hand_shanten = calculate_shanten(&game.hands[0].tiles, &user_settings).get_calculated_shanten();
                 if full_hand_shanten < shanten {
-                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten, &user_settings), &TileDisplayOption::Text));
+                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten, &user_settings), TileDisplayOption::Text));
                 }
             }
             else {
                 full_hand_shanten = calculate_shanten(&game.hands[0].tiles, &user_settings).get_calculated_shanten();
             }
 
-            print_hand(&game.hands[0], &TileDisplayOption::Text);
-            print_hand(&game.hands[0], &TileDisplayOption::Unicode);
+            print_hand(&game.hands[0], TileDisplayOption::Text);
+            print_hand(&game.hands[0], TileDisplayOption::Unicode);
 
             if full_hand_shanten < 0 {
                 println!("The hand is complete! Send \"n\" to start new hand, \"q\" to quit, or you can continue discarding tiles");
@@ -1118,21 +1196,21 @@ Choose rules:
         "/start" => {
             user_state.game_state = Some(generate_normal_dealed_game(1, true));
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return [format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], &settings.tile_display), tile_to_string(&game_state.dora_indicators[0], &settings.tile_display))].to_vec();
+            return [format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], settings.tile_display), tile_to_string(&game_state.dora_indicators[0], settings.tile_display))].to_vec();
         },
         "/hand" => {
             if user_state.game_state.is_none() {
                 return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return [format!("Current hand:\n{}", &get_printable_hand(&game_state.hands[0], &settings.tile_display))].to_vec();
+            return [format!("Current hand:\n{}", &get_printable_hand(&game_state.hands[0], settings.tile_display))].to_vec();
         },
         "/discards" => {
             if user_state.game_state.is_none() {
                 return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return [format!("Dora indicator: {}\nDiscards:\n{}", tile_to_string(&game_state.dora_indicators[0], &settings.tile_display), &get_printable_tiles_set_main(&game_state.discards[0], &settings.tile_display))].to_vec();
+            return [format!("Dora indicator: {}\nDiscards:\n{}", tile_to_string(&game_state.dora_indicators[0], settings.tile_display), &get_printable_tiles_set_main(&game_state.discards[0], settings.tile_display))].to_vec();
         },
         "/explain" => {
             return match &user_state.previous_move {
@@ -1192,7 +1270,7 @@ Choose rules:
             if new_shanten > 0 {
                 let possible_waits = convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits);
                 let tiles_improving_shanten = filter_tiles_improving_shanten(&game_state.hands[0].tiles[0..13], &possible_waits, new_shanten, &settings);
-                answer += &format!("Discarded tile {} ({} tiles)\n", tile_to_string(&tile, &settings.tile_display), find_potentially_available_tile_count(&game_state, 0, &tiles_improving_shanten));
+                answer += &format!("Discarded tile {} ({} tiles)\n", tile_to_string(&tile, settings.tile_display), find_potentially_available_tile_count(&get_visible_tiles(&game_state, 0), &tiles_improving_shanten));
                 if has_potential_for_furiten(&shanten_calculator.best_waits, &game_state.discards[0]) {
                     answer += "Possible furiten\n";
                 }
@@ -1200,7 +1278,7 @@ Choose rules:
             else {
                 answer += "The hand is ready now\n";
                 let wait_tiles = filter_tiles_finishing_hand(&game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &settings);
-                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles, &settings.tile_display), find_potentially_available_tile_count(&game_state, 0, &wait_tiles));
+                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles, settings.tile_display), find_potentially_available_tile_count(&get_visible_tiles(&game_state, 0), &wait_tiles));
                 if has_furiten_waits(&wait_tiles, &game_state.discards[0]) {
                     answer += " furiten";
                 }
@@ -1223,7 +1301,7 @@ Choose rules:
                             answer += "Best discard\n"
                         }
                         else {
-                            answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles, &settings.tile_display), best_discards.improvement_tile_count);
+                            answer += &format!("Better discards: {} (score {})\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display), best_discards.score);
                         }
                     }
                 }
@@ -1232,23 +1310,23 @@ Choose rules:
                         answer += "Best discard\n"
                     }
                     else {
-                        answer += &format!("Better discards: {} ({} tiles)\n", get_printable_tiles_set(&best_discards.tiles, &settings.tile_display), best_discards.improvement_tile_count);
+                        answer += &format!("Better discards: {} (score {})\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display), best_discards.score);
                     }
 
                     user_state.game_state = Some(generate_normal_dealed_game(1, true));
                     let game_state = user_state.game_state.as_ref().unwrap();
-                    return [answer, "New hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], &settings.tile_display)].to_vec();
+                    return [answer, "New hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], settings.tile_display)].to_vec();
                 }
             },
             None => panic!("We got 13 tiles but nothing discarded, that is broken"),
         }
 
         draw_tile_to_hand(&mut game_state, 0);
-        answer += &format!("Drawn {}\n", tile_to_string(&game_state.hands[0].tiles[13], &settings.tile_display));
+        answer += &format!("Drawn {}\n", tile_to_string(&game_state.hands[0].tiles[13], settings.tile_display));
         answer += &format!("{} tiles left in the live wall\n", game_state.live_wall.len());
     }
 
-    answer += &get_printable_hand(&game_state.hands[0], &settings.tile_display);
+    answer += &get_printable_hand(&game_state.hands[0], settings.tile_display);
 
     return [answer].to_vec();
 }
