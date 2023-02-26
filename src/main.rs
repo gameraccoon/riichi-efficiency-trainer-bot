@@ -1102,7 +1102,7 @@ Choose rules:
         "/start" => {
             user_state.game_state = Some(generate_normal_dealed_game(1, true));
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return ["Dealed new hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], &settings.tile_display)].to_vec();
+            return [format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], &settings.tile_display), tile_to_string(&game_state.dora_indicators[0], &settings.tile_display))].to_vec();
         },
         "/hand" => {
             if user_state.game_state.is_none() {
