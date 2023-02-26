@@ -1084,6 +1084,16 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
         return ["No message received".to_string()].to_vec();
     }
 
+    const NO_HAND_IN_PROGRESS_MESSAGE: &str = "No hand is in progress, send /start to start a new hand";
+    const SETTINGS_TEXT: &str = "Choose tile display type:
+/display_text - use text representation of tiles
+/display_unicode - use unicode characters of mahjong tiles
+/display_url - send url to image of the hand
+
+Choose rules:
+/toggle_chiitoi - turn on/off counting for Chiitoitsu
+/toggle_kokushi - turn on/off counting for Kokushi musou";
+
     let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
     let mut settings = &mut user_state.settings;
@@ -1096,10 +1106,10 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
         },
         "/hand" => {
             if user_state.game_state.is_none() {
-                return ["No hand is in progress, send /start to start a new hand".to_string()].to_vec();
+                return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return ["Current hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], &settings.tile_display)].to_vec();
+            return [format!("Current hand:\n{}", &get_printable_hand(&game_state.hands[0], &settings.tile_display))].to_vec();
         },
         "/explain" => {
             return match &user_state.previous_move {
@@ -1107,8 +1117,8 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
                 None => ["No moves are recorded to explain".to_string()].to_vec(),
             }
         },
-        "/display_settings" => {
-            return ["Choose display type:\n/display_text - use text representation of tiles\n/display_unicode - use unicode characters of mahjong tiles\n/display_url - send url to image of the hand".to_string()].to_vec()
+        "/settings" => {
+            return [SETTINGS_TEXT.to_string()].to_vec()
         },
         "/display_unicode" => {
             settings.tile_display = TileDisplayOption::Unicode;
@@ -1134,7 +1144,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
     }
 
     if user_state.game_state.is_none() {
-        return ["No hand is in progress, send /start to start a new hand".to_string()].to_vec();
+        return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
     }
 
     let mut game_state = user_state.game_state.as_mut().unwrap();
