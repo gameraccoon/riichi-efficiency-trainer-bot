@@ -70,10 +70,14 @@ fn print_hand(hand: &Hand, tile_display: &TileDisplayOption) {
 }
 
 fn get_printable_hand(hand: &Hand, tile_display: &TileDisplayOption) -> String {
+    get_printable_tiles_set_main(&hand.tiles, &tile_display)
+}
+
+fn get_printable_tiles_set_main(tiles: &[Tile], tile_display: &TileDisplayOption) -> String {
     match tile_display {
-        TileDisplayOption::Text => get_printable_tiles_set_text(&hand.tiles),
-        TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&hand.tiles),
-        TileDisplayOption::UrlImage => get_printable_tiles_set_url_image(&hand.tiles),
+        TileDisplayOption::Text => get_printable_tiles_set_text(&tiles),
+        TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&tiles),
+        TileDisplayOption::UrlImage => get_printable_tiles_set_url_image(&tiles),
     }
 }
 
@@ -87,6 +91,10 @@ fn get_printable_tiles_set(tiles: &[Tile], tile_display: &TileDisplayOption) -> 
 
 fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
     let mut result: String = "".to_string();
+
+    if tiles.is_empty() {
+        return "".to_string();
+    }
 
     let mut last_suit = Suit::Special;
     for tile in tiles {
@@ -123,6 +131,10 @@ fn get_printable_tiles_set_unicode(tiles: &[Tile]) -> String {
 }
 
 fn get_printable_tiles_set_url_image(tiles: &[Tile]) -> String {
+    if tiles.is_empty() {
+        return "".to_string();
+    }
+
     return "https://api.tempai.net/image/".to_string() + &get_printable_tiles_set_text(&tiles) + ".png";
 }
 
@@ -1110,6 +1122,13 @@ Choose rules:
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
             return [format!("Current hand:\n{}", &get_printable_hand(&game_state.hands[0], &settings.tile_display))].to_vec();
+        },
+        "/discards" => {
+            if user_state.game_state.is_none() {
+                return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
+            }
+            let game_state = &user_state.game_state.as_ref().unwrap();
+            return [format!("Dora indicator: {}\nDiscards:\n{}", tile_to_string(&game_state.dora_indicators[0], &settings.tile_display), &get_printable_tiles_set_main(&game_state.discards[0], &settings.tile_display))].to_vec();
         },
         "/explain" => {
             return match &user_state.previous_move {
