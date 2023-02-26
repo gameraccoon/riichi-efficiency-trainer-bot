@@ -62,76 +62,26 @@ struct GameState {
 enum TileDisplayOption {
     Text,
     Unicode,
+    UrlImage,
 }
 
 fn print_hand(hand: &Hand, tile_display: &TileDisplayOption) {
     println!("{}", get_printable_tiles_set(&hand.tiles, tile_display));
 }
 
+fn get_printable_hand(hand: &Hand, tile_display: &TileDisplayOption) -> String {
+    match tile_display {
+        TileDisplayOption::Text => get_printable_tiles_set_text(&hand.tiles),
+        TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&hand.tiles),
+        TileDisplayOption::UrlImage => get_printable_tiles_set_url_image(&hand.tiles),
+    }
+}
+
 fn get_printable_tiles_set(tiles: &[Tile], tile_display: &TileDisplayOption) -> String {
     match tile_display {
         TileDisplayOption::Text => get_printable_tiles_set_text(&tiles),
         TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&tiles),
-    }
-}
-
-fn tile_to_string(tile: &Tile, tile_display: &TileDisplayOption) -> String {
-    match tile_display {
-        TileDisplayOption::Text => tile.value.to_string() + get_printable_suit(tile.suit),
-        TileDisplayOption::Unicode => TILE_UNICODE[get_tile_index(&tile)].to_string(),
-    }
-}
-
-fn get_tile_index(tile: &Tile) -> usize {
-    let shift = match tile.suit {
-        Suit::Man => 0,
-        Suit::Pin => 10,
-        Suit::Sou => 20,
-        Suit::Special => 30,
-    };
-
-    return (tile.value + shift - 1) as usize;
-}
-
-fn get_tile_from_index(index: usize) -> Tile {
-    return match index {
-        i if i < (10 as usize) => Tile{suit: Suit::Man, value: (index + 1) as u8},
-        i if i < (20 as usize) => Tile{suit: Suit::Pin, value: (index + 1 - 10) as u8},
-        i if i < (30 as usize) => Tile{suit: Suit::Sou, value: (index + 1 - 20) as u8},
-        _ => Tile{suit: Suit::Special, value: (index + 1 - 30) as u8},
-    }
-}
-
-fn get_printable_tiles_set_unicode(tiles: &[Tile]) -> String {
-    let mut result: String = "".to_string();
-
-    for t in tiles {
-        if t.value == 0 {
-            break;
-        }
-
-        result += TILE_UNICODE[get_tile_index(t)];
-    }
-
-    return result;
-}
-
-fn get_printable_suit(suit: Suit) -> &'static str {
-    match suit {
-        Suit::Man => "m",
-        Suit::Pin => "p",
-        Suit::Sou => "s",
-        Suit::Special => "z",
-    }
-}
-
-fn get_suit_from_letter(suit_letter: char) -> Option<Suit> {
-    match suit_letter {
-        'm' => Some(Suit::Man),
-        'p' => Some(Suit::Pin),
-        's' => Some(Suit::Sou),
-        'z' => Some(Suit::Special),
-        _ => None,
+        TileDisplayOption::UrlImage => get_printable_tiles_set_text(&tiles),
     }
 }
 
@@ -156,6 +106,71 @@ fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
     result += get_printable_suit(last_suit);
 
     return result;
+}
+
+fn get_printable_tiles_set_unicode(tiles: &[Tile]) -> String {
+    let mut result: String = "".to_string();
+
+    for t in tiles {
+        if t.value == 0 {
+            break;
+        }
+
+        result += TILE_UNICODE[get_tile_index(t)];
+    }
+
+    return result;
+}
+
+fn get_printable_tiles_set_url_image(tiles: &[Tile]) -> String {
+    return "https://api.tempai.net/image/".to_string() + &get_printable_tiles_set_text(&tiles) + ".png";
+}
+
+fn tile_to_string(tile: &Tile, tile_display: &TileDisplayOption) -> String {
+    match tile_display {
+        TileDisplayOption::Text => tile.value.to_string() + get_printable_suit(tile.suit),
+        TileDisplayOption::Unicode => TILE_UNICODE[get_tile_index(&tile)].to_string(),
+        TileDisplayOption::UrlImage => tile.value.to_string() + get_printable_suit(tile.suit),
+    }
+}
+
+fn get_tile_index(tile: &Tile) -> usize {
+    let shift = match tile.suit {
+        Suit::Man => 0,
+        Suit::Pin => 10,
+        Suit::Sou => 20,
+        Suit::Special => 30,
+    };
+
+    return (tile.value + shift - 1) as usize;
+}
+
+fn get_tile_from_index(index: usize) -> Tile {
+    return match index {
+        i if i < (10 as usize) => Tile{suit: Suit::Man, value: (index + 1) as u8},
+        i if i < (20 as usize) => Tile{suit: Suit::Pin, value: (index + 1 - 10) as u8},
+        i if i < (30 as usize) => Tile{suit: Suit::Sou, value: (index + 1 - 20) as u8},
+        _ => Tile{suit: Suit::Special, value: (index + 1 - 30) as u8},
+    }
+}
+
+fn get_printable_suit(suit: Suit) -> &'static str {
+    match suit {
+        Suit::Man => "m",
+        Suit::Pin => "p",
+        Suit::Sou => "s",
+        Suit::Special => "z",
+    }
+}
+
+fn get_suit_from_letter(suit_letter: char) -> Option<Suit> {
+    match suit_letter {
+        'm' => Some(Suit::Man),
+        'p' => Some(Suit::Pin),
+        's' => Some(Suit::Sou),
+        'z' => Some(Suit::Special),
+        _ => None,
+    }
 }
 
 fn sort_hand(hand: &mut Hand) {
@@ -928,7 +943,7 @@ struct UserSettings {
 
 fn get_default_settings() -> UserSettings {
     UserSettings{
-        tile_display: TileDisplayOption::Text,
+        tile_display: TileDisplayOption::UrlImage,
         allow_kokushi: true,
         allow_chiitoitsu: true,
     }
@@ -980,7 +995,7 @@ fn play_in_console() {
         let mut should_restart_game = false;
         let mut game = generate_dealed_game_with_hand(1, &predefined_hand, false);
 
-        println!("Dealed hand: {}", get_printable_tiles_set(&game.hands[0].tiles, &TileDisplayOption::Text));
+        println!("Dealed hand: {}", get_printable_hand(&game.hands[0], &TileDisplayOption::Text));
 
         while !should_restart_game && !should_quit_game && !game.live_wall.is_empty() {
             let full_hand_shanten;
@@ -993,7 +1008,7 @@ fn play_in_console() {
                     println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten, &TileDisplayOption::Text), find_potentially_available_tile_count(&game, 0, &tiles_improving_shanten));
                 }
                 else {
-                    println!("The hand is tenpai (ready) now");
+                    println!("The hand is ready now");
                     println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &user_settings), &TileDisplayOption::Text));
                 }
 
@@ -1077,20 +1092,23 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
         "/start" => {
             user_state.game_state = Some(generate_normal_dealed_game(1, true));
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return ["Dealed new hand:\n".to_string() + &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display)].to_vec();
+            return ["Dealed new hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], &settings.tile_display)].to_vec();
         },
         "/hand" => {
             if user_state.game_state.is_none() {
                 return ["No hand is in progress, send /start to start a new hand".to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return ["Current hand:\n".to_string() + &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display)].to_vec();
+            return ["Current hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], &settings.tile_display)].to_vec();
         },
         "/explain" => {
             return match &user_state.previous_move {
                 Some(previous_move) => [get_move_explanation_text(&previous_move, &settings)].to_vec(),
                 None => ["No moves are recorded to explain".to_string()].to_vec(),
             }
+        },
+        "/display_settings" => {
+            return ["Choose display type:\n/display_text - use text representation of tiles\n/display_unicode - use unicode characters of mahjong tiles\n/display_url - send url to image of the hand".to_string()].to_vec()
         },
         "/display_unicode" => {
             settings.tile_display = TileDisplayOption::Unicode;
@@ -1099,6 +1117,10 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
         "/display_text" => {
             settings.tile_display = TileDisplayOption::Text;
             return ["Set display style to text".to_string()].to_vec()
+        },
+        "/display_url" => {
+            settings.tile_display = TileDisplayOption::UrlImage;
+            return ["Set display style to image url".to_string()].to_vec()
         },
         "/toggle_kokushi" => {
             settings.allow_kokushi = !settings.allow_kokushi;
@@ -1119,7 +1141,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
 
     let requested_tile = get_tile_from_input(&message_text.to_lowercase());
     if requested_tile == EMPTY_TILE {
-        return ["Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"".to_string()].to_vec();
+        return ["Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z' or a tile name (e.g. all \"7z\", \"red\", and \"chun\" are acceptable inputs for the red dragon tile)".to_string()].to_vec();
     }
 
     let full_hand_shanten = calculate_shanten(&game_state.hands[0].tiles, &settings).get_calculated_shanten();
@@ -1182,7 +1204,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
 
                     user_state.game_state = Some(generate_normal_dealed_game(1, true));
                     let game_state = user_state.game_state.as_ref().unwrap();
-                    return [answer, "New hand:\n".to_string() + &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display)].to_vec();
+                    return [answer, "New hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], &settings.tile_display)].to_vec();
                 }
             },
             None => panic!("We got 13 tiles but nothing discarded, that is broken"),
@@ -1193,7 +1215,7 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
         answer += &format!("{} tiles left in the live wall\n", game_state.live_wall.len());
     }
 
-    answer += &get_printable_tiles_set(&game_state.hands[0].tiles, &settings.tile_display);
+    answer += &get_printable_hand(&game_state.hands[0], &settings.tile_display);
 
     return [answer].to_vec();
 }
