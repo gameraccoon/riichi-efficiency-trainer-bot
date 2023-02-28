@@ -343,7 +343,7 @@ fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str, deal_fir
         live_wall: tiles,
     };
 
-    if game_state.hands[0].tiles.len() < 14 && deal_first_tile {
+    if game_state.hands[0].tiles[13] == EMPTY_TILE && deal_first_tile {
         draw_tile_to_hand(&mut game_state, 0);
     }
 
@@ -1191,57 +1191,66 @@ Choose rules:
     let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
     let mut settings = &mut user_state.settings;
+    let mut message_split = message_text.split_whitespace();
 
-    match *message_text {
-        "/start" => {
-            user_state.game_state = Some(generate_normal_dealed_game(1, true));
+    match message_split.next() {
+        Some("/start") => {
+            match message_split.next() {
+                Some(value) => {
+                    user_state.game_state = Some(generate_dealed_game_with_hand(1, value, true));
+                },
+                None => {
+                    user_state.game_state = Some(generate_normal_dealed_game(1, true));
+                },
+            }
             let game_state = &user_state.game_state.as_ref().unwrap();
             return [format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], settings.tile_display), tile_to_string(&game_state.dora_indicators[0], settings.tile_display))].to_vec();
         },
-        "/hand" => {
+        Some("/hand") => {
             if user_state.game_state.is_none() {
                 return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
             return [format!("Current hand:\n{}", &get_printable_hand(&game_state.hands[0], settings.tile_display))].to_vec();
         },
-        "/discards" => {
+        Some("/discards") => {
             if user_state.game_state.is_none() {
                 return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
             return [format!("Dora indicator: {}\nDiscards:\n{}", tile_to_string(&game_state.dora_indicators[0], settings.tile_display), &get_printable_tiles_set_main(&game_state.discards[0], settings.tile_display))].to_vec();
         },
-        "/explain" => {
+        Some("/explain") => {
             return match &user_state.previous_move {
                 Some(previous_move) => [get_move_explanation_text(&previous_move, &settings)].to_vec(),
                 None => ["No moves are recorded to explain".to_string()].to_vec(),
             }
         },
-        "/settings" => {
+        Some("/settings") => {
             return [SETTINGS_TEXT.to_string()].to_vec()
         },
-        "/display_unicode" => {
+        Some("/display_unicode") => {
             settings.tile_display = TileDisplayOption::Unicode;
             return ["Set display style to unicode".to_string()].to_vec()
         },
-        "/display_text" => {
+        Some("/display_text") => {
             settings.tile_display = TileDisplayOption::Text;
             return ["Set display style to text".to_string()].to_vec()
         },
-        "/display_url" => {
+        Some("/display_url") => {
             settings.tile_display = TileDisplayOption::UrlImage;
             return ["Set display style to image url".to_string()].to_vec()
         },
-        "/toggle_kokushi" => {
+        Some("/toggle_kokushi") => {
             settings.allow_kokushi = !settings.allow_kokushi;
             return [format!("Kokushi musou is now {}counted for shanten calculation",  if settings.allow_kokushi {""} else {"not "})].to_vec()
         },
-        "/toggle_chiitoi" => {
+        Some("/toggle_chiitoi") => {
             settings.allow_chiitoitsu = !settings.allow_chiitoitsu;
             return [format!("Chiitoitsu is now {}counted for shanten calculation", if settings.allow_chiitoitsu {""} else {"not "})].to_vec()
         },
-        _ => {},
+        Some(_) => {},
+        None => {},
     }
 
     if user_state.game_state.is_none() {
