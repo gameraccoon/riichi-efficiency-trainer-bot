@@ -943,7 +943,7 @@ fn calculate_best_discards_ukeire1(hand_tiles: &[Tile], minimal_shanten: i8, vis
 fn calculate_best_discards_ukeire2(hand_tiles: &[Tile], minimal_shanten: i8, visible_tiles: &mut TileFrequencyTable, user_settings: &UserSettings) -> Vec<WeightedDiscard> {
     assert!(hand_tiles[13] != EMPTY_TILE, "calculate_best_discards_ukeire2 expected hand with 14 tiles");
 
-    if minimal_shanten <= 1 {
+    if minimal_shanten <= 0 {
         return calculate_best_discards_ukeire1(&hand_tiles, minimal_shanten, &visible_tiles, &user_settings);
     }
 
