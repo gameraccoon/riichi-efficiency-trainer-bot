@@ -266,13 +266,11 @@ fn make_hand_from_string(hand_string: &str) -> Hand {
 
     // we can't have a valid hand less than 13 tiles + suit letter
     if hand_string.len() < 14 {
-        println!("The provided hand can't be parsed, make sure you copied the full string");
         return EMPTY_HAND;
     }
 
     let tiles_count = hand_string.chars().filter(|c| c.is_numeric()).count();
     if tiles_count < 13 || tiles_count > 14 {
-        println!("The provided hand can't be parsed, possibly incorrect amount of tiles");
         return EMPTY_HAND;
     }
 
@@ -284,7 +282,6 @@ fn make_hand_from_string(hand_string: &str) -> Hand {
         let value = letter.to_string().parse().unwrap_or(0);
         if value > 0 {
             if current_suit.is_none() {
-                println!("The provided hand can't be parsed, possibly incorrect suit letter");
                 return EMPTY_HAND;
             }
             tile_position -= 1;
@@ -298,11 +295,11 @@ fn make_hand_from_string(hand_string: &str) -> Hand {
     return hand;
 }
 
-fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str, deal_first_tile: bool) -> GameState {
+fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str, deal_first_tile: bool) -> Option<GameState> {
     let predefined_hand = make_hand_from_string(&hand_string);
 
     if predefined_hand.tiles[0] == EMPTY_TILE {
-        return generate_normal_dealed_game(player_count, deal_first_tile);
+        return None;
     }
 
     let mut tiles = populate_full_set();
@@ -347,7 +344,7 @@ fn generate_dealed_game_with_hand(player_count: u32, hand_string: &str, deal_fir
         draw_tile_to_hand(&mut game_state, 0);
     }
 
-    return game_state;
+    return Some(game_state);
 }
 
 fn make_frequency_table(tiles: &[Tile]) -> TileFrequencyTable {
@@ -1087,7 +1084,8 @@ fn play_in_console() {
 
     while !should_quit_game {
         let mut should_restart_game = false;
-        let mut game = generate_dealed_game_with_hand(1, &predefined_hand, false);
+        let game = generate_dealed_game_with_hand(1, &predefined_hand, false);
+        let mut game = game.unwrap_or(generate_normal_dealed_game(1, false));
 
         println!("Dealed hand: {}", get_printable_hand(&game.hands[0], TileDisplayOption::Text));
 
@@ -1197,7 +1195,10 @@ Choose rules:
         Some("/start") => {
             match message_split.next() {
                 Some(value) => {
-                    user_state.game_state = Some(generate_dealed_game_with_hand(1, value, true));
+                    user_state.game_state = generate_dealed_game_with_hand(1, value, true);
+                    if user_state.game_state.is_none() {
+                        return ["Given string doesn't represent a valid hand".to_string()].to_vec();
+                    }
                 },
                 None => {
                     user_state.game_state = Some(generate_normal_dealed_game(1, true));
@@ -1277,9 +1278,7 @@ Choose rules:
             let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13], &settings);
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
-                let possible_waits = convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits);
-                let tiles_improving_shanten = filter_tiles_improving_shanten(&game_state.hands[0].tiles[0..13], &possible_waits, new_shanten, &settings);
-                answer += &format!("Discarded tile {} ({} tiles)\n", tile_to_string(&tile, settings.tile_display), find_potentially_available_tile_count(&get_visible_tiles(&game_state, 0), &tiles_improving_shanten));
+                answer += &format!("Discarded tile {}\n", tile_to_string(&tile, settings.tile_display));
                 if has_potential_for_furiten(&shanten_calculator.best_waits, &game_state.discards[0]) {
                     answer += "Possible furiten\n";
                 }
@@ -1310,7 +1309,7 @@ Choose rules:
                             answer += "Best discard\n"
                         }
                         else {
-                            answer += &format!("Better discards: {} (score {})\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display), best_discards.score);
+                            answer += &format!("Better discards: {}\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display));
                         }
                     }
                 }
@@ -1319,7 +1318,7 @@ Choose rules:
                         answer += "Best discard\n"
                     }
                     else {
-                        answer += &format!("Better discards: {} (score {})\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display), best_discards.score);
+                        answer += &format!("Better discards: {}\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display));
                     }
 
                     user_state.game_state = Some(generate_normal_dealed_game(1, true));
