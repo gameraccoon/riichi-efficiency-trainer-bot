@@ -733,6 +733,14 @@ fn get_tile_from_input(input: &str) -> Tile {
         ("chii", 7),
         ("paa", 8),
         ("kyuu", 9),
+        ("ichi", 1),
+        ("ni", 2),
+        ("yon", 4),
+        ("go", 5),
+        ("roku", 6),
+        ("nana", 7),
+        ("hachi", 8),
+        ("kyu", 9),
     ]);
 
     if input.len() == 2 {
