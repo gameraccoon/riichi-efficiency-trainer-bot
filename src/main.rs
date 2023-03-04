@@ -1007,10 +1007,7 @@ struct DiscardScores {
     score: u32,
 }
 
-fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten: i8, user_settings: &UserSettings) -> DiscardScores {
-    let mut visible_tiles = get_visible_tiles(game, hand_index);
-    let best_discards = calculate_best_discards_ukeire2(&game.hands[hand_index].tiles, minimal_shanten, &mut visible_tiles, &user_settings);
-
+fn get_best_discard_scores(best_discards: &Vec<WeightedDiscard>) -> DiscardScores {
     if !best_discards.is_empty() {
         let mut result = DiscardScores{ tiles: Vec::new(), score: best_discards[0].score };
         for tile_info in best_discards {
@@ -1024,6 +1021,18 @@ fn get_best_discard_scores(game: &GameState, hand_index: usize, minimal_shanten:
     }
 
     return DiscardScores{ tiles: Vec::new(), score: 0 };
+}
+
+fn get_discard_score(best_discards: &Vec<WeightedDiscard>, tile: &Tile) -> u32 {
+    if !best_discards.is_empty() {
+        for tile_info in best_discards {
+            if tile_info.tile == *tile {
+                return tile_info.score;
+            }
+        }
+    }
+
+    return 0;
 }
 
 struct PreviousMoveData {
@@ -1175,8 +1184,17 @@ fn read_telegram_token() -> String {
 
 struct UserState {
     game_state: Option<GameState>,
+    current_score: u32,
+    best_score: u32,
     previous_move: Option<PreviousMoveData>,
     settings: UserSettings,
+}
+
+fn start_game(user_state: &mut UserState) -> String {
+    let game_state = &user_state.game_state.as_ref().unwrap();
+    user_state.current_score = 0;
+    user_state.best_score = 0;
+    return format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], user_state.settings.tile_display), tile_to_string(&game_state.dora_indicators[0], user_state.settings.tile_display));
 }
 
 fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<String> {
@@ -1212,8 +1230,7 @@ Choose rules:
                     user_state.game_state = Some(generate_normal_dealed_game(1, true));
                 },
             }
-            let game_state = &user_state.game_state.as_ref().unwrap();
-            return [format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], settings.tile_display), tile_to_string(&game_state.dora_indicators[0], settings.tile_display))].to_vec();
+            return [start_game(user_state)].to_vec();
         },
         Some("/hand") => {
             if user_state.game_state.is_none() {
@@ -1274,7 +1291,9 @@ Choose rules:
     }
 
     let full_hand_shanten = calculate_shanten(&game_state.hands[0].tiles, &settings).get_calculated_shanten();
-    let best_discards = get_best_discard_scores(&game_state, 0, full_hand_shanten, &settings);
+    let best_discards = calculate_best_discards_ukeire2(&game_state.hands[0].tiles, full_hand_shanten, &mut get_visible_tiles(&game_state, 0), &settings);
+
+    let best_discard_scores = get_best_discard_scores(&best_discards);
     let mut discarded_tile = None;
 
     match game_state.hands[0].tiles.iter().position(|&r| r == requested_tile) {
@@ -1282,11 +1301,16 @@ Choose rules:
             user_state.previous_move = Some(PreviousMoveData{ game_state: (*game_state).clone(), hand_index: 0, full_hand_shanten: full_hand_shanten, discarded_tile: EMPTY_TILE });
             let tile = discard_tile(&mut game_state, 0, tile_index_in_hand as usize);
             discarded_tile = Some(tile);
+            let current_discard_score = get_discard_score(&best_discards, &tile);
+
+            user_state.best_score += best_discard_scores.score;
+            user_state.current_score += current_discard_score;
             user_state.previous_move.as_mut().unwrap().discarded_tile = tile;
+
             let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13], &settings);
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
-                answer += &format!("Discarded tile {}\n", tile_to_string(&tile, settings.tile_display));
+                answer += &format!("Discarded tile {} ({}/{})\n", tile_to_string(&tile, settings.tile_display), current_discard_score, best_discard_scores.score);
                 if has_potential_for_furiten(&shanten_calculator.best_waits, &game_state.discards[0]) {
                     answer += "Possible furiten\n";
                 }
@@ -1309,29 +1333,26 @@ Choose rules:
         let shanten = shanten_calculator.get_calculated_shanten();
         match discarded_tile {
             Some(tile) => {
-                if shanten > 0 {
-                    if shanten > full_hand_shanten {
-                        answer += "Went back in shanten\n";
-                    } else {
-                        if best_discards.tiles.contains(&tile) {
-                            answer += "Best discard\n"
-                        }
-                        else {
-                            answer += &format!("Better discards: {}\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display));
-                        }
-                    }
-                }
-                else {
-                    if best_discards.tiles.contains(&tile) {
-                        answer += "Best discard\n"
+                if shanten > full_hand_shanten {
+                    answer += "Went back in shanten\n";
+                } else {
+                    if best_discard_scores.tiles.contains(&tile) {
+                        answer += "Best discard\n";
                     }
                     else {
-                        answer += &format!("Better discards: {}\n", get_printable_tiles_set(&best_discards.tiles, settings.tile_display));
+                        answer += &format!("Better discards: {}\n", get_printable_tiles_set(&best_discard_scores.tiles, settings.tile_display));
                     }
+                }
 
+                if shanten <= 0 {
+                    if user_state.best_score > 0 {
+                        answer += &format!("Score: {}/{} or {}%", user_state.current_score, user_state.best_score, (100.0 * (user_state.current_score as f32) / (user_state.best_score as f32)).floor());
+                    }
+                    else {
+                        answer += &format!("Some error occured, best possible score was zero, current score: {}", user_state.current_score);
+                    }
                     user_state.game_state = Some(generate_normal_dealed_game(1, true));
-                    let game_state = user_state.game_state.as_ref().unwrap();
-                    return [answer, "New hand:\n".to_string() + &get_printable_hand(&game_state.hands[0], settings.tile_display)].to_vec();
+                    return [answer, start_game(user_state)].to_vec();
                 }
             },
             None => panic!("We got 13 tiles but nothing discarded, that is broken"),
@@ -1362,7 +1383,7 @@ async fn run_telegram_bot() {
 
     let handler = Update::filter_message().endpoint(
         |bot: Bot, user_states: SharedUserStates, message: Message| async move {
-            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: None, previous_move: None, settings: get_default_settings()});
+            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: None, current_score: 0, best_score: 0, previous_move: None, settings: get_default_settings()});
             let responses = process_user_message(user_state, &message);
             for response in responses {
                 bot.send_message(message.chat.id, response).await?;
