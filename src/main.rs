@@ -18,6 +18,20 @@ const TILE_UNICODE: [&str; 37] = [
     "🀀", "🀁", "🀂", "🀃", "🀆", "🀅", "🀄"
 ];
 
+const TILE_ENGLISH: [&str; 37] = [
+    "one of man", "two of man", "three of man", "four of man", "five of man", "six of man", "seven of man", "eight of man", "nine of man", "err",
+    "one of pin", "two of pin", "three of pin", "four of pin", "five of pin", "six of pin", "seven of pin", "eight of pin", "nine of pin", "err",
+    "one of sou", "two of sou", "three of sou", "four of sou", "five of sou", "six of sou", "seven of sou", "eight of sou", "nine of sou", "err",
+    "east wind", "south wind", "west wind", "north wind", "white dragon", "green dragon", "red dragon"
+];
+
+const TILE_JAPANESE: [&str; 37] = [
+    "ii wan", "ryan wan", "san wan", "suu wan", "uu wan", "rou wan", "chii wan", "paa wan", "kyuu wan", "err",
+    "ii pin", "ryan pin", "san pin", "suu pin", "uu pin", "rou pin", "chii pin", "paa pin", "kyuu pin", "err",
+    "ii sou", "ryan sou", "san sou", "suu sou", "uu sou", "rou sou", "chii sou", "paa sou", "kyuu sou", "err",
+    "ton", "nan", "shaa", "pei", "haku", "hatsu", "chun"
+];
+
 #[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 enum Suit {
     Man, // printed as "m"
@@ -64,6 +78,33 @@ enum TileDisplayOption {
     Text,
     Unicode,
     UrlImage,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum TermsDisplayOption {
+    EnglishTerms,
+    JapaneseTerms,
+}
+
+struct PreviousMoveData {
+    game_state: GameState,
+    hand_index: usize,
+    full_hand_shanten: i8,
+    discarded_tile: Tile,
+}
+
+struct UserSettings {
+    tile_display: TileDisplayOption,
+    terms_display: TermsDisplayOption,
+    language_key: &'static str,
+    allow_kokushi: bool,
+    allow_chiitoitsu: bool,
+}
+
+type Translations = HashMap<&'static str, HashMap<&'static str, &'static str>>;
+
+fn translate(key: &str, translations: &Translations, user_settings: &UserSettings) -> &'static str {
+    return translations[user_settings.language_key][key];
 }
 
 fn print_hand(hand: &Hand, tile_display: TileDisplayOption) {
@@ -139,11 +180,10 @@ fn get_printable_tiles_set_url_image(tiles: &[Tile]) -> String {
     return "https://api.tempai.net/image/".to_string() + &get_printable_tiles_set_text(&tiles) + ".png";
 }
 
-fn tile_to_string(tile: &Tile, tile_display: TileDisplayOption) -> String {
-    match tile_display {
-        TileDisplayOption::Text => tile.value.to_string() + get_printable_suit(tile.suit),
-        TileDisplayOption::Unicode => TILE_UNICODE[get_tile_index(&tile)].to_string(),
-        TileDisplayOption::UrlImage => tile.value.to_string() + get_printable_suit(tile.suit),
+fn tile_to_string(tile: &Tile, terms_display: TermsDisplayOption) -> &'static str {
+    match terms_display {
+        TermsDisplayOption::EnglishTerms => TILE_ENGLISH[get_tile_index(&tile)],
+        TermsDisplayOption::JapaneseTerms => TILE_JAPANESE[get_tile_index(&tile)],
     }
 }
 
@@ -1035,22 +1075,11 @@ fn get_discard_score(best_discards: &Vec<WeightedDiscard>, tile: &Tile) -> u32 {
     return 0;
 }
 
-struct PreviousMoveData {
-    game_state: GameState,
-    hand_index: usize,
-    full_hand_shanten: i8,
-    discarded_tile: Tile,
-}
-
-struct UserSettings {
-    tile_display: TileDisplayOption,
-    allow_kokushi: bool,
-    allow_chiitoitsu: bool,
-}
-
 fn get_default_settings() -> UserSettings {
     UserSettings{
         tile_display: TileDisplayOption::UrlImage,
+        terms_display: TermsDisplayOption::EnglishTerms,
+        language_key: "ene",
         allow_kokushi: true,
         allow_chiitoitsu: true,
     }
@@ -1064,8 +1093,9 @@ fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &U
 
     let mut result = String::new();
     for discard_info in best_discards {
-        result += &format!("{}: {} (score {})\n",
-            tile_to_string(&discard_info.tile, user_settings.tile_display),
+        let tile_string = tile_to_string(&discard_info.tile, user_settings.terms_display);
+        result += &format!("{}{}: {} (score {})\n",
+            tile_string.chars().nth(0).unwrap().to_uppercase(), &tile_string[1..],
             get_printable_tiles_set(&discard_info.tiles_improving_shanten, user_settings.tile_display),
             discard_info.score,
         )
@@ -1122,7 +1152,7 @@ fn play_in_console() {
                 }
 
                 draw_tile_to_hand(&mut game, 0);
-                println!("Drawn {}", tile_to_string(&game.hands[0].tiles[13], TileDisplayOption::Text));
+                println!("Drawn {}", tile_to_string(&game.hands[0].tiles[13], TermsDisplayOption::EnglishTerms));
                 println!("{} tiles left in the live wall", game.live_wall.len());
                 full_hand_shanten = calculate_shanten(&game.hands[0].tiles, &user_settings).get_calculated_shanten();
                 if full_hand_shanten < shanten {
@@ -1194,10 +1224,10 @@ fn start_game(user_state: &mut UserState) -> String {
     let game_state = &user_state.game_state.as_ref().unwrap();
     user_state.current_score = 0;
     user_state.best_score = 0;
-    return format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], user_state.settings.tile_display), tile_to_string(&game_state.dora_indicators[0], user_state.settings.tile_display));
+    return format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], user_state.settings.tile_display), tile_to_string(&game_state.dora_indicators[0], user_state.settings.terms_display));
 }
 
-fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<String> {
+fn process_user_message(user_state: &mut UserState, message: &Message, translations: &Translations) -> Vec<String> {
     if message.text().is_none() {
         return ["No message received".to_string()].to_vec();
     }
@@ -1207,6 +1237,10 @@ fn process_user_message(user_state: &mut UserState, message: &Message) -> Vec<St
 /display_text - use text representation of tiles
 /display_unicode - use unicode characters of mahjong tiles
 /display_url - send url to image of the hand
+
+Choose terminology:
+/terms_eng - English terminology
+/terms_jap - Japanese terminology
 
 Choose rules:
 /toggle_chiitoi - turn on/off counting for Chiitoitsu
@@ -1244,7 +1278,7 @@ Choose rules:
                 return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return [format!("Dora indicator: {}\nDiscards:\n{}", tile_to_string(&game_state.dora_indicators[0], settings.tile_display), &get_printable_tiles_set_main(&game_state.discards[0], settings.tile_display))].to_vec();
+            return [format!("Dora indicator: {}\nDiscards:\n{}", tile_to_string(&game_state.dora_indicators[0], settings.terms_display), &get_printable_tiles_set_main(&game_state.discards[0], settings.tile_display))].to_vec();
         },
         Some("/explain") => {
             return match &user_state.previous_move {
@@ -1266,6 +1300,16 @@ Choose rules:
         Some("/display_url") => {
             settings.tile_display = TileDisplayOption::UrlImage;
             return ["Set display style to image url".to_string()].to_vec()
+        },
+        Some("/terms_eng") => {
+            settings.terms_display = TermsDisplayOption::EnglishTerms;
+            settings.language_key = "ene";
+            return ["Set terminology to English".to_string()].to_vec()
+        },
+        Some("/terms_jap") => {
+            settings.terms_display = TermsDisplayOption::JapaneseTerms;
+            settings.language_key = "enj";
+            return ["Set terminology to Japanese".to_string()].to_vec()
         },
         Some("/toggle_kokushi") => {
             settings.allow_kokushi = !settings.allow_kokushi;
@@ -1310,13 +1354,14 @@ Choose rules:
             let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13], &settings);
             let new_shanten = shanten_calculator.get_calculated_shanten();
             if new_shanten > 0 {
-                answer += &format!("Discarded tile {} ({}/{})\n", tile_to_string(&tile, settings.tile_display), current_discard_score, best_discard_scores.score);
+                answer += &format!("Discarded {} ({}/{})\n", tile_to_string(&tile, settings.terms_display), current_discard_score, best_discard_scores.score);
                 if has_potential_for_furiten(&shanten_calculator.best_waits, &game_state.discards[0]) {
                     answer += "Possible furiten\n";
                 }
             }
             else {
-                answer += "The hand is ready now\n";
+                answer += translate("tenpai_hand", &translations, &settings);
+                answer += "\n";
                 let wait_tiles = filter_tiles_finishing_hand(&game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &settings);
                 answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set(&wait_tiles, settings.tile_display), find_potentially_available_tile_count(&get_visible_tiles(&game_state, 0), &wait_tiles));
                 if has_furiten_waits(&wait_tiles, &game_state.discards[0]) {
@@ -1359,13 +1404,31 @@ Choose rules:
         }
 
         draw_tile_to_hand(&mut game_state, 0);
-        answer += &format!("Drawn {}\n", tile_to_string(&game_state.hands[0].tiles[13], settings.tile_display));
+        answer += &format!("Drawn {}\n", tile_to_string(&game_state.hands[0].tiles[13], settings.terms_display));
         answer += &format!("{} tiles left in the live wall\n", game_state.live_wall.len());
     }
 
     answer += &get_printable_hand(&game_state.hands[0], settings.tile_display);
 
     return [answer].to_vec();
+}
+
+fn load_translations() -> Translations {
+    let mut translations = HashMap::new();
+
+    {
+        translations.insert("ene", HashMap::from([
+            ("tenpai_hand", "The hand is ready now"),
+        ]));
+    }
+
+    {
+        translations.insert("enj", HashMap::from([
+            ("tenpai_hand", "Tenpai"),
+        ]));
+    }
+
+    return translations;
 }
 
 async fn run_telegram_bot() {
@@ -1376,15 +1439,19 @@ async fn run_telegram_bot() {
 
     let bot = Bot::new(token);
 
+    let translations = load_translations();
+
     type UserStates = DashMap<ChatId, UserState>;
     type SharedUserStates = Arc<UserStates>;
+    type SharedTranslations = Arc<Translations>;
 
     let user_states = SharedUserStates::new(UserStates::new());
+    let shared_translations = SharedTranslations::new(translations);
 
     let handler = Update::filter_message().endpoint(
-        |bot: Bot, user_states: SharedUserStates, message: Message| async move {
+        |bot: Bot, user_states: SharedUserStates, translations: SharedTranslations, message: Message| async move {
             let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: None, current_score: 0, best_score: 0, previous_move: None, settings: get_default_settings()});
-            let responses = process_user_message(user_state, &message);
+            let responses = process_user_message(user_state, &message, &translations);
             for response in responses {
                 bot.send_message(message.chat.id, response).await?;
             }
@@ -1394,7 +1461,7 @@ async fn run_telegram_bot() {
 
     Dispatcher::builder(bot, handler)
         // Pass the shared state to the handler as a dependency.
-        .dependencies(dptree::deps![user_states.clone()])
+        .dependencies(dptree::deps![user_states.clone(), shared_translations.clone()])
         .build()
         .dispatch()
         .await;
