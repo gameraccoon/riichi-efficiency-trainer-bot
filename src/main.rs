@@ -134,6 +134,10 @@ fn get_printable_tiles_set(tiles: &[Tile], tile_display: TileDisplayOption) -> S
     }
 }
 
+fn get_capitalized(string: &str) -> String {
+    string.chars().nth(0).unwrap().to_uppercase().to_string() + &string[1..]
+}
+
 fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
     let mut result: String = "".to_string();
 
@@ -1097,8 +1101,8 @@ fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &U
     let mut result = String::new();
     for discard_info in best_discards {
         let tile_string = tile_to_string(&discard_info.tile, user_settings.terms_display);
-        result += &format!("{}{}: {} (score {})\n",
-            tile_string.chars().nth(0).unwrap().to_uppercase(), &tile_string[1..],
+        result += &format!("{}: {} (score {})\n",
+            get_capitalized(&tile_string),
             get_printable_tiles_set(&discard_info.tiles_improving_shanten, user_settings.tile_display),
             discard_info.score,
         )
@@ -1259,7 +1263,7 @@ fn start_game(user_state: &mut UserState) -> String {
     let game_state = &user_state.game_state.as_ref().unwrap();
     user_state.current_score = 0;
     user_state.best_score = 0;
-    return format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], user_state.settings.tile_display), tile_to_string(&game_state.dora_indicators[0], user_state.settings.terms_display));
+    return format!("Dealed new hand:\n{}\nDora indicator: {}", &get_printable_hand(&game_state.hands[0], user_state.settings.tile_display), get_capitalized(&tile_to_string(&game_state.dora_indicators[0], user_state.settings.terms_display)));
 }
 
 fn process_user_message(user_state: &mut UserState, message: &Message, translations: &Translations) -> Vec<String> {
@@ -1313,7 +1317,7 @@ Choose rules:
                 return [NO_HAND_IN_PROGRESS_MESSAGE.to_string()].to_vec();
             }
             let game_state = &user_state.game_state.as_ref().unwrap();
-            return [format!("Dora indicator: {}\nDiscards:\n{}", tile_to_string(&game_state.dora_indicators[0], settings.terms_display), &get_printable_tiles_set_main(&game_state.discards[0], settings.tile_display))].to_vec();
+            return [format!("Dora indicator: {}\nDiscards:\n{}", get_capitalized(&tile_to_string(&game_state.dora_indicators[0], settings.terms_display)), &get_printable_tiles_set_main(&game_state.discards[0], settings.tile_display))].to_vec();
         },
         Some("/explain") => {
             return match &user_state.previous_move {
