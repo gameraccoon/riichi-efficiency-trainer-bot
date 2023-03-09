@@ -3,10 +3,12 @@ extern crate rand;
 use crate::rand::prelude::SliceRandom;
 use dashmap::DashMap;
 use rand::thread_rng;
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use teloxide::prelude::*;
 
@@ -73,14 +75,14 @@ struct GameState {
     live_wall: Vec<Tile>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 enum TileDisplayOption {
     Text,
     Unicode,
     UrlImage,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 enum TermsDisplayOption {
     EnglishTerms,
     JapaneseTerms,
@@ -93,18 +95,19 @@ struct PreviousMoveData {
     discarded_tile: Tile,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 struct UserSettings {
     tile_display: TileDisplayOption,
     terms_display: TermsDisplayOption,
-    language_key: &'static str,
+    language_key: String,
     allow_kokushi: bool,
     allow_chiitoitsu: bool,
 }
 
-type Translations = HashMap<&'static str, HashMap<&'static str, &'static str>>;
+type Translations = HashMap<String, HashMap<&'static str, &'static str>>;
 
 fn translate(key: &str, translations: &Translations, user_settings: &UserSettings) -> &'static str {
-    return translations[user_settings.language_key][key];
+    return translations[&user_settings.language_key][key];
 }
 
 fn print_hand(hand: &Hand, tile_display: TileDisplayOption) {
@@ -1079,7 +1082,7 @@ fn get_default_settings() -> UserSettings {
     UserSettings{
         tile_display: TileDisplayOption::UrlImage,
         terms_display: TermsDisplayOption::EnglishTerms,
-        language_key: "ene",
+        language_key: "ene".to_string(),
         allow_kokushi: true,
         allow_chiitoitsu: true,
     }
@@ -1218,6 +1221,38 @@ struct UserState {
     best_score: u32,
     previous_move: Option<PreviousMoveData>,
     settings: UserSettings,
+    settings_unsaved: bool,
+}
+
+impl Serialize for UserState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.settings.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for UserState {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut user_state = get_default_user_state();
+        user_state.settings = UserSettings::deserialize(deserializer)?;
+        return Ok(user_state);
+    }
+}
+
+fn get_default_user_state() -> UserState {
+    UserState{
+        game_state: None,
+        current_score: 0,
+        best_score: 0,
+        previous_move: None,
+        settings: get_default_settings(),
+        settings_unsaved: false,
+    }
 }
 
 fn start_game(user_state: &mut UserState) -> String {
@@ -1291,32 +1326,39 @@ Choose rules:
         },
         Some("/display_unicode") => {
             settings.tile_display = TileDisplayOption::Unicode;
+            user_state.settings_unsaved = true;
             return ["Set display style to unicode".to_string()].to_vec()
         },
         Some("/display_text") => {
             settings.tile_display = TileDisplayOption::Text;
+            user_state.settings_unsaved = true;
             return ["Set display style to text".to_string()].to_vec()
         },
         Some("/display_url") => {
             settings.tile_display = TileDisplayOption::UrlImage;
+            user_state.settings_unsaved = true;
             return ["Set display style to image url".to_string()].to_vec()
         },
         Some("/terms_eng") => {
             settings.terms_display = TermsDisplayOption::EnglishTerms;
-            settings.language_key = "ene";
+            settings.language_key = "ene".to_string();
+            user_state.settings_unsaved = true;
             return ["Set terminology to English".to_string()].to_vec()
         },
         Some("/terms_jap") => {
             settings.terms_display = TermsDisplayOption::JapaneseTerms;
-            settings.language_key = "enj";
+            settings.language_key = "enj".to_string();
+            user_state.settings_unsaved = true;
             return ["Set terminology to Japanese".to_string()].to_vec()
         },
         Some("/toggle_kokushi") => {
             settings.allow_kokushi = !settings.allow_kokushi;
+            user_state.settings_unsaved = true;
             return [format!("Kokushi musou is now {}counted for shanten calculation",  if settings.allow_kokushi {""} else {"not "})].to_vec()
         },
         Some("/toggle_chiitoi") => {
             settings.allow_chiitoitsu = !settings.allow_chiitoitsu;
+            user_state.settings_unsaved = true;
             return [format!("Chiitoitsu is now {}counted for shanten calculation", if settings.allow_chiitoitsu {""} else {"not "})].to_vec()
         },
         Some(_) => {},
@@ -1417,18 +1459,45 @@ fn load_translations() -> Translations {
     let mut translations = HashMap::new();
 
     {
-        translations.insert("ene", HashMap::from([
+        translations.insert("ene".to_string(), HashMap::from([
             ("tenpai_hand", "The hand is ready now"),
         ]));
     }
 
     {
-        translations.insert("enj", HashMap::from([
+        translations.insert("enj".to_string(), HashMap::from([
             ("tenpai_hand", "Tenpai"),
         ]));
     }
 
     return translations;
+}
+
+fn load_user_states(file_path: &str) -> DashMap<ChatId, UserState> {
+    if Path::new(file_path).exists() {
+        let data = fs::read_to_string(file_path).expect("Can't open file");
+        return serde_json::from_str(&data).expect("Can't parse user states file");
+    }
+    else {
+        return DashMap::new();
+    }
+}
+
+fn save_user_state(file_path: &str, chat_id: ChatId, user_state: &UserState) {
+    fs::create_dir_all(std::path::Path::new(file_path).parent().unwrap()).expect("The directory can't be created");
+    let mut hash_map: HashMap<ChatId, UserSettings>;
+    if Path::new(file_path).exists() {
+        let data = fs::read_to_string(file_path).expect("Can't open file");
+        hash_map = serde_json::from_str(&data).expect("Can't parse user states file");
+    }
+    else {
+        hash_map = HashMap::new();
+    }
+
+    hash_map.insert(chat_id, user_state.settings.clone());
+
+    let data = serde_json::to_string(&hash_map).expect("Can't serialize user data");
+    fs::write(file_path, data).expect("Can't write to file");
 }
 
 async fn run_telegram_bot() {
@@ -1445,13 +1514,18 @@ async fn run_telegram_bot() {
     type SharedUserStates = Arc<UserStates>;
     type SharedTranslations = Arc<Translations>;
 
-    let user_states = SharedUserStates::new(UserStates::new());
+    let user_states = SharedUserStates::new(load_user_states("./data/user_states.json"));
     let shared_translations = SharedTranslations::new(translations);
 
     let handler = Update::filter_message().endpoint(
         |bot: Bot, user_states: SharedUserStates, translations: SharedTranslations, message: Message| async move {
-            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||UserState{game_state: None, current_score: 0, best_score: 0, previous_move: None, settings: get_default_settings()});
+            let user_state: &mut UserState = &mut user_states.entry(message.chat.id).or_insert_with(||get_default_user_state());
+
             let responses = process_user_message(user_state, &message, &translations);
+            if user_state.settings_unsaved {
+                save_user_state("./data/user_states.json", message.chat.id, &user_state);
+                user_state.settings_unsaved = false;
+            }
             for response in responses {
                 bot.send_message(message.chat.id, response).await?;
             }
