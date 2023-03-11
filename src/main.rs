@@ -6,7 +6,6 @@ use rand::thread_rng;
 use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use std::cmp::max;
 use std::collections::HashMap;
-use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -108,10 +107,6 @@ type Translations = HashMap<String, HashMap<&'static str, &'static str>>;
 
 fn translate(key: &str, translations: &Translations, user_settings: &UserSettings) -> &'static str {
     return translations[&user_settings.language_key][key];
-}
-
-fn print_hand(hand: &Hand, tile_display: TileDisplayOption) {
-    println!("{}", get_printable_tiles_set(&hand.tiles, tile_display));
 }
 
 fn get_printable_hand(hand: &Hand, tile_display: TileDisplayOption) -> String {
@@ -839,30 +834,6 @@ fn get_tile_from_input(input: &str) -> Tile {
     }
 }
 
-fn get_discards_reducing_shanten(tiles: &[Tile], current_shanten: i8, user_settings: &UserSettings) -> Vec<Tile> {
-    assert!(tiles.len() == 14, "get_discards_reducing_shanten is expected to be called on 14 tiles");
-
-    let mut result = Vec::with_capacity(tiles.len());
-    let mut previous_tile = EMPTY_TILE;
-
-    for i in 0..14 {
-        if tiles[i] == previous_tile {
-            continue;
-        }
-        let mut reduced_tiles = tiles.to_vec();
-        reduced_tiles.remove(i);
-
-        let calculator = calculate_shanten(&reduced_tiles, &user_settings);
-
-        if calculator.get_calculated_shanten() < current_shanten {
-            result.push(tiles[i]);
-        }
-        previous_tile = tiles[i];
-    }
-
-    return result;
-}
-
 fn get_visible_tiles(game: &GameState, visible_hand_index: usize) -> TileFrequencyTable {
     let mut result = game.total_discards_table.clone();
 
@@ -1129,89 +1100,6 @@ fn has_potential_for_furiten(waits_table: &TileFrequencyTable, discards: &Vec<Ti
     }
 
     return false;
-}
-
-fn play_in_console() {
-    let mut should_quit_game = false;
-    let mut predefined_hand: String = "".to_string();
-    let user_settings = get_default_settings();
-
-    while !should_quit_game {
-        let mut should_restart_game = false;
-        let game = generate_dealed_game_with_hand(1, &predefined_hand, false);
-        let mut game = game.unwrap_or(generate_normal_dealed_game(1, false));
-
-        println!("Dealed hand: {}", get_printable_hand(&game.hands[0], TileDisplayOption::Text));
-
-        while !should_restart_game && !should_quit_game && !game.live_wall.is_empty() {
-            let full_hand_shanten;
-            if game.hands[0].tiles[13] == EMPTY_TILE {
-                let shanten_calculator = calculate_shanten(&game.hands[0].tiles[0..13], &user_settings);
-                let shanten = shanten_calculator.get_calculated_shanten();
-                if shanten > 0 {
-                    println!("Shanten: {}", shanten);
-                    let tiles_improving_shanten = filter_tiles_improving_shanten(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), shanten, &user_settings);
-                    println!("Tiles that can improve shanten: {}, total {} tiles", get_printable_tiles_set(&tiles_improving_shanten, TileDisplayOption::Text), find_potentially_available_tile_count(&get_visible_tiles(&game, 0), &tiles_improving_shanten));
-                }
-                else {
-                    println!("The hand is ready now");
-                    println!("Waits: {}", get_printable_tiles_set(&filter_tiles_finishing_hand(&game.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.best_waits), &user_settings), TileDisplayOption::Text));
-                }
-
-                draw_tile_to_hand(&mut game, 0);
-                println!("Drawn {}", tile_to_string(&game.hands[0].tiles[13], TermsDisplayOption::EnglishTerms));
-                println!("{} tiles left in the live wall", game.live_wall.len());
-                full_hand_shanten = calculate_shanten(&game.hands[0].tiles, &user_settings).get_calculated_shanten();
-                if full_hand_shanten < shanten {
-                    println!("Discards that reduce shanten: {}", get_printable_tiles_set(&get_discards_reducing_shanten(&game.hands[0].tiles, shanten, &user_settings), TileDisplayOption::Text));
-                }
-            }
-            else {
-                full_hand_shanten = calculate_shanten(&game.hands[0].tiles, &user_settings).get_calculated_shanten();
-            }
-
-            print_hand(&game.hands[0], TileDisplayOption::Text);
-            print_hand(&game.hands[0], TileDisplayOption::Unicode);
-
-            if full_hand_shanten < 0 {
-                println!("The hand is complete! Send \"n\" to start new hand, \"q\" to quit, or you can continue discarding tiles");
-            }
-            else {
-                println!("Send tile to discard, e.g. \"1m\", \"n\" to start new hand, \"q\" to quit");
-            }
-
-            let mut input = String::new();
-            match std::io::stdin().read_line(&mut input) {
-                Ok(_input) => {},
-                Err(_err) => {},
-            }
-            input = input.trim().strip_suffix("\r\n").or(input.strip_suffix("\n")).unwrap_or(&input).to_string();
-
-            if input.starts_with("n") {
-                should_restart_game = true;
-                predefined_hand = "".to_string();
-                println!("Dealing a new hand");
-
-                if input.len() > 2 {
-                    predefined_hand = input[2..].to_string();
-                }
-            }
-            else if input == "q" {
-                should_quit_game = true;
-                println!("Quitting");
-            }
-            else {
-                let requested_tile = get_tile_from_input(&input.to_lowercase());
-                if requested_tile == EMPTY_TILE {
-                    println!("Entered string doesn't seem to be a tile representation, tile should be a digit followed by 'm', 'p', 's', or 'z', e.g. \"3s\"");
-                }
-                match game.hands[0].tiles.iter().position(|&r| r == requested_tile) {
-                    Some(tile_index_in_hand) => { discard_tile(&mut game, 0, tile_index_in_hand as usize); },
-                    None => { println!("Could not find the given tile in the hand"); },
-                }
-            }
-        }
-    }
 }
 
 fn read_telegram_token() -> String {
@@ -1547,11 +1435,5 @@ async fn run_telegram_bot() {
 
 #[tokio::main]
 async fn main() {
-    let args = env::args();
-    if args.len() > 1 {
-        play_in_console();
-    }
-    else {
-        run_telegram_bot().await;
-    }
+    run_telegram_bot().await;
 }
