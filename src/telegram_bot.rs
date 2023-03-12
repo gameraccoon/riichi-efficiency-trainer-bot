@@ -245,11 +245,16 @@ Choose render size (smaller = faster):
                     else {
                         answer += &format!("Some error occured, best possible score was zero, current score: {}", user_state.current_score);
                     }
-                    user_state.game_state = Some(generate_normal_dealed_game(1, true));
                     return [Response{ text: answer, image: None}, start_game(user_state, &static_data)].to_vec();
                 }
             },
             None => panic!("We got 13 tiles but nothing discarded, that is broken"),
+        }
+
+        if game_state.live_wall.is_empty() {
+            answer += "\nEnd of life wall, no more tiles left";
+            user_state.game_state = Some(generate_normal_dealed_game(1, true));
+            return [Response{ text: answer, image: None}, start_game(user_state, &static_data)].to_vec();
         }
 
         draw_tile_to_hand(&mut game_state, 0);

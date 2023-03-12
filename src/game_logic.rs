@@ -125,7 +125,7 @@ pub fn generate_normal_dealed_game(player_count: u32, deal_first_tile: bool) -> 
         _dead_wall: dead_wall,
         dora_indicators: dora_indicators,
         opened_dora_indicators: 1,
-        live_wall: tiles
+        live_wall: tiles,
     };
 
     if deal_first_tile {
