@@ -5,17 +5,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DisplaySettings {
-    pub tile_display: TileDisplayOption,
     pub terms_display: TermsDisplayOption,
     pub language_key: String,
+    pub render_size: usize,
 }
-
-const TILE_UNICODE: [&str; 37] = [
-    "🀇", "🀈", "🀉", "🀊", "🀋", "🀌", "🀍", "🀎", "🀏", "err",
-    "🀙", "🀚", "🀛", "🀜", "🀝", "🀞", "🀟", "🀠", "🀡", "err",
-    "🀐", "🀑", "🀒", "🀓", "🀔", "🀕", "🀖", "🀗", "🀘", "err",
-    "🀀", "🀁", "🀂", "🀃", "🀆", "🀅", "🀄"
-];
 
 const TILE_ENGLISH: [&str; 37] = [
     "one of man", "two of man", "three of man", "four of man", "five of man", "six of man", "seven of man", "eight of man", "nine of man", "err",
@@ -51,43 +44,16 @@ pub fn get_suit_from_letter(suit_letter: char) -> Option<Suit> {
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub enum TileDisplayOption {
-    Text,
-    Unicode,
-    UrlImage,
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum TermsDisplayOption {
     EnglishTerms,
     JapaneseTerms,
-}
-
-pub fn get_printable_hand(hand: &Hand, tile_display: TileDisplayOption) -> String {
-    get_printable_tiles_set_main(&hand.tiles, tile_display)
-}
-
-pub fn get_printable_tiles_set_main(tiles: &[Tile], tile_display: TileDisplayOption) -> String {
-    match tile_display {
-        TileDisplayOption::Text => get_printable_tiles_set_text(&tiles),
-        TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&tiles),
-        TileDisplayOption::UrlImage => get_printable_tiles_set_url_image(&tiles),
-    }
-}
-
-pub fn get_printable_tiles_set(tiles: &[Tile], tile_display: TileDisplayOption) -> String {
-    match tile_display {
-        TileDisplayOption::Text => get_printable_tiles_set_text(&tiles),
-        TileDisplayOption::Unicode => get_printable_tiles_set_unicode(&tiles),
-        TileDisplayOption::UrlImage => get_printable_tiles_set_text(&tiles),
-    }
 }
 
 pub fn get_capitalized(string: &str) -> String {
     string.chars().nth(0).unwrap().to_uppercase().to_string() + &string[1..]
 }
 
-fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
+pub fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
     let mut result: String = "".to_string();
 
     if tiles.is_empty() {
@@ -112,28 +78,6 @@ fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
     result += get_printable_suit(last_suit);
 
     return result;
-}
-
-fn get_printable_tiles_set_unicode(tiles: &[Tile]) -> String {
-    let mut result: String = "".to_string();
-
-    for t in tiles {
-        if t.value == 0 {
-            break;
-        }
-
-        result += TILE_UNICODE[get_tile_index(t)];
-    }
-
-    return result;
-}
-
-fn get_printable_tiles_set_url_image(tiles: &[Tile]) -> String {
-    if tiles.is_empty() {
-        return "".to_string();
-    }
-
-    return "https://api.tempai.net/image/".to_string() + &get_printable_tiles_set_text(&tiles) + ".png";
 }
 
 pub fn tile_to_string(tile: &Tile, terms_display: TermsDisplayOption) -> &'static str {

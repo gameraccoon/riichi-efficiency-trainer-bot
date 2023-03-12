@@ -11,9 +11,9 @@ pub struct UserSettings {
 pub fn get_default_settings() -> UserSettings {
     UserSettings{
         display_settings: DisplaySettings{
-            tile_display: TileDisplayOption::UrlImage,
             terms_display: TermsDisplayOption::EnglishTerms,
             language_key: "ene".to_string(),
+            render_size: 1,
         },
         score_settings: ScoreCalculationSettings {
             allow_kokushi: true,

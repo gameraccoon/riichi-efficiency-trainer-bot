@@ -4,6 +4,7 @@ mod user_settings;
 mod user_state;
 mod input_output;
 mod translations;
+mod image_render;
 mod telegram_bot;
 
 extern crate rand;
