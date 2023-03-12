@@ -1,4 +1,4 @@
-use core::cmp::max;
+use core::cmp::{min, max};
 use image::io::Reader as ImageReader;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba, SubImage};
 use crate::game_logic::*;
@@ -103,13 +103,20 @@ fn render_dora_indicators_to_image(img: &mut (impl GenericImageView<Pixel = Rgba
 
 pub fn render_game_state(game: &GameState, render_data: &SizedImageData) -> ImageBuf {
     let mut img = render_data.image_buffer.clone();
+    let middle_x = (render_data.tile_width * 14 + render_data.drawn_tile_gap) / 2;
 
     render_hand_to_image(&mut img, &game.hands[0], &render_data, 0, render_data.top_offset + render_data.tile_height * 9, render_data.drawn_tile_gap);
 
-    let middle_x = render_data.tile_width * 14 / 2;
-    let discards_width = max(6, &game.discards[0].len() / 8) as u32;
-    let discards_shift = (7 - game.discards[0].len() / discards_width as usize) as u32;
-    render_discards_to_image(&mut img, &game.discards[0], &render_data, middle_x - render_data.tile_width * 6 / 2, render_data.top_offset + discards_shift * render_data.tile_height, discards_width);
+    let discards: &Vec<Tile> = &game.discards[0];
+    if !discards.is_empty() {
+        let discards_width = min(max(6, 1 + (discards.len() - 1) / 6), 14) as u32;
+        let mut discards_top_shift = (7 - (discards.len() - 1) / discards_width as usize) as u32;
+        // after this size tiles won't fit normally anymore, reduce the gaps to fit more
+        if discards.len() > 14*6 {
+            discards_top_shift = 1;
+        }
+        render_discards_to_image(&mut img, &discards, &render_data, middle_x - render_data.tile_width * discards_width / 2, render_data.top_offset + discards_top_shift * render_data.tile_height, discards_width);
+    }
 
     render_dora_indicators_to_image(&mut img, &game.dora_indicators, &render_data, middle_x - render_data.tile_width * 7 / 2, render_data.top_offset);
 
