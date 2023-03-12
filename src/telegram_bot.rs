@@ -115,7 +115,7 @@ Choose render size (smaller = faster):
             }
             return [start_game(user_state, &static_data)].to_vec();
         },
-        Some("/hand") => {
+        Some("/table") => {
             if user_state.game_state.is_none() {
                 return text_response(NO_HAND_IN_PROGRESS_MESSAGE);
             }
