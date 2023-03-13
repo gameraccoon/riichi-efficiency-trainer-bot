@@ -124,7 +124,7 @@ Choose render size (smaller = faster):
         },
         Some("/explain") => {
             return match &user_state.previous_move {
-                Some(previous_move) => text_response_str(get_move_explanation_text(&previous_move, &settings)),
+                Some(previous_move) => image_response(render_move_explanation(&previous_move, &settings.score_settings, &static_data.render_data.sizes[settings.display_settings.render_size]), get_move_explanation_text(&previous_move, &settings)),
                 None => text_response("No moves are recorded to explain"),
             }
         },

@@ -1,17 +1,17 @@
 use core::cmp::{min, max};
 use image::io::Reader as ImageReader;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba, SubImage};
+
 use crate::game_logic::*;
+use crate::efficiency_calculator::*;
 
 pub type ImageBuf = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
 pub struct SizedImageData {
     tiles_atlas: DynamicImage,
-    image_buffer: ImageBuf,
     tile_width: u32,
     tile_height: u32,
-    drawn_tile_gap: u32,
-    top_offset: u32,
+    bg_color: Rgba<u8>,
 }
 
 pub struct ImageRenderData {
@@ -22,21 +22,12 @@ pub fn load_sized_image_data(path: &str) -> SizedImageData {
     let atlas = ImageReader::open(path).expect(&format!("file '{}' not found", path)).decode().expect(&format!("file '{}' can't be decoded", path));
     let tile_width = atlas.width() / 10;
     let tile_height = atlas.height() / 4;
-
-    let drawn_tile_gap = tile_width / 4;
-    let top_offset = tile_height / 4;
-    let total_width = tile_width * 14 + drawn_tile_gap;
-    let total_height = tile_height * 10 + top_offset;
-
-    let bg_color: Rgba<u8> = Rgba([53, 101, 77, 255]);
-    
+ 
     SizedImageData{
         tiles_atlas: atlas,
-        image_buffer: ImageBuffer::from_pixel(total_width, total_height, bg_color),
         tile_width: tile_width,
         tile_height: tile_height,
-        drawn_tile_gap: drawn_tile_gap,
-        top_offset: top_offset,
+        bg_color: Rgba([53, 101, 77, 255]),
     }
 }
 
@@ -102,10 +93,15 @@ fn render_dora_indicators_to_image(img: &mut (impl GenericImageView<Pixel = Rgba
 }
 
 pub fn render_game_state(game: &GameState, render_data: &SizedImageData) -> ImageBuf {
-    let mut img = render_data.image_buffer.clone();
-    let middle_x = (render_data.tile_width * 14 + render_data.drawn_tile_gap) / 2;
+    let drawn_tile_gap = render_data.tile_width / 4;
+    let top_offset = render_data.tile_height / 4;
+    let total_width = render_data.tile_width * 14 + drawn_tile_gap;
+    let total_height = render_data.tile_height * 10 + top_offset;
 
-    render_hand_to_image(&mut img, &game.hands[0], &render_data, 0, render_data.top_offset + render_data.tile_height * 9, render_data.drawn_tile_gap);
+    let mut img = ImageBuffer::from_pixel(total_width, total_height, render_data.bg_color);
+    let middle_x = (render_data.tile_width * 14 + drawn_tile_gap) / 2;
+
+    render_hand_to_image(&mut img, &game.hands[0], &render_data, 0, top_offset + render_data.tile_height * 9, drawn_tile_gap);
 
     let discards: &Vec<Tile> = &game.discards[0];
     if !discards.is_empty() {
@@ -115,10 +111,59 @@ pub fn render_game_state(game: &GameState, render_data: &SizedImageData) -> Imag
         if discards.len() > 14*6 {
             discards_top_shift = 1;
         }
-        render_discards_to_image(&mut img, &discards, &render_data, middle_x - render_data.tile_width * discards_width / 2, render_data.top_offset + discards_top_shift * render_data.tile_height, discards_width);
+        render_discards_to_image(&mut img, &discards, &render_data, middle_x - render_data.tile_width * discards_width / 2, top_offset + discards_top_shift * render_data.tile_height, discards_width);
     }
 
-    render_dora_indicators_to_image(&mut img, &game.dora_indicators, &render_data, middle_x - render_data.tile_width * 7 / 2, render_data.top_offset);
+    render_dora_indicators_to_image(&mut img, &game.dora_indicators, &render_data, middle_x - render_data.tile_width * 7 / 2, top_offset);
+
+    return img;
+}
+
+fn render_explanation_line_to_image(img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage), discard: &Tile, improvements: &[Tile], total_improvements: &[Tile], render_data: &SizedImageData, x: u32, y: u32, gap_after_discard: u32) {
+    {
+        let tile_sprite_view = get_tile_image(&discard, &render_data);
+        img.copy_from(&tile_sprite_view.to_image(), x, y).unwrap();
+    }
+
+    let mut local_i = 0;
+    for i in 0..total_improvements.len() {
+        if total_improvements[i] == improvements[local_i] {
+            let tile_sprite_view = get_tile_image(&improvements[local_i], &render_data);
+            img.copy_from(&tile_sprite_view.to_image(), x + gap_after_discard + (i as u32 + 1) * render_data.tile_width, y).unwrap();
+            local_i += 1;
+            if local_i == improvements.len() {
+                break;
+            }
+        }
+    }
+}
+
+pub fn render_move_explanation(previous_move: &PreviousMoveData, score_settings: &ScoreCalculationSettings, render_data: &SizedImageData) -> ImageBuf {
+    assert!(previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE, "Expected move state hand have 14 tiles before the discard");
+
+    let horizontal_gap = render_data.tile_width / 4;
+    let vertical_gap = render_data.tile_height / 4;
+    let mut visible_tiles = get_visible_tiles(&previous_move.game_state, previous_move.hand_index);
+    let best_discards = calculate_best_discards_ukeire2(&previous_move.game_state.hands[previous_move.hand_index].tiles, previous_move.full_hand_shanten, &mut visible_tiles, &score_settings);
+
+    let mut total_improvements: Vec<Tile> = Vec::new();
+    for discard_info in &best_discards {
+        for improvement in &discard_info.tiles_improving_shanten {
+            // todo: linear search should probably be more efficient here
+            match total_improvements.binary_search(&improvement) {
+                Ok(_pos) => {},
+                Err(pos) => total_improvements.insert(pos, *improvement),
+            }
+        }
+    }
+
+    let mut img = ImageBuffer::from_pixel(horizontal_gap * 3 + (total_improvements.len() as u32 + 1) * render_data.tile_width, vertical_gap + best_discards.len() as u32 * (render_data.tile_height + vertical_gap), render_data.bg_color);
+
+    let mut pos_y = vertical_gap;
+    for discard_info in best_discards {
+        render_explanation_line_to_image(&mut img, &discard_info.tile, &discard_info.tiles_improving_shanten, &total_improvements, &render_data, horizontal_gap, pos_y, horizontal_gap);
+        pos_y += render_data.tile_height + vertical_gap;
+    }
 
     return img;
 }
