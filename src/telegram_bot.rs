@@ -32,15 +32,19 @@ fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &U
     let mut visible_tiles = get_visible_tiles(&previous_move.game_state, previous_move.hand_index);
     let best_discards = calculate_best_discards_ukeire2(&previous_move.game_state.hands[previous_move.hand_index].tiles, previous_move.full_hand_shanten, &mut visible_tiles, &user_settings.score_settings);
 
+    if best_discards.is_empty() {
+        return "No appropriate discards. This shouldn't happen. Please report this error to the developers".to_string();
+    }
+
     let mut result = String::new();
     for discard_info in best_discards {
         let tile_string = tile_to_string(&discard_info.tile, user_settings.display_settings.terms_display);
-        result += &format!("{}: {} (score {})\n",
+        result += &format!("{} has score {}\n",
             get_capitalized(&tile_string),
-            get_printable_tiles_set_text(&discard_info.tiles_improving_shanten),
             discard_info.score,
         )
     }
+
     return result;
 }
 
@@ -212,7 +216,7 @@ Choose render size (smaller = faster):
                 answer += translate("tenpai_hand", &static_data.translations, &settings);
                 answer += "\n";
                 let wait_tiles = filter_tiles_finishing_hand(&game_state.hands[0].tiles[0..13], &convert_frequency_table_to_flat_vec(&shanten_calculator.get_best_waits()), &settings.score_settings);
-                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set_text(&wait_tiles), find_potentially_available_tile_count(&get_visible_tiles(&game_state, 0), &wait_tiles));
+                answer += &format!("Waits: {} ({} tiles)", get_printable_tiles_set_text(&wait_tiles, settings.display_settings.terms_display), find_potentially_available_tile_count(&get_visible_tiles(&game_state, 0), &wait_tiles));
                 if has_furiten_waits(&wait_tiles, &game_state.discards[0]) {
                     answer += " furiten";
                 }
@@ -234,7 +238,7 @@ Choose render size (smaller = faster):
                         answer += "Best discard\n";
                     }
                     else {
-                        answer += &format!("Better discards: {}\n", get_printable_tiles_set_text(&best_discard_scores.tiles));
+                        answer += &format!("Better discards: {}\n", get_capitalized(&get_printable_tiles_set_text(&best_discard_scores.tiles, settings.display_settings.terms_display)));
                     }
                 }
 

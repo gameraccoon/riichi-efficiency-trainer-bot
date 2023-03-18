@@ -24,12 +24,15 @@ const TILE_JAPANESE: [&str; 37] = [
     "ton", "nan", "shaa", "pei", "haku", "hatsu", "chun"
 ];
 
-pub fn get_printable_suit(suit: Suit) -> &'static str {
+pub fn get_printable_suit(suit: Suit, terms_display: TermsDisplayOption) -> &'static str {
     match suit {
-        Suit::Man => "m",
-        Suit::Pin => "p",
-        Suit::Sou => "s",
-        Suit::Special => "z",
+        Suit::Man => match terms_display {
+            TermsDisplayOption::EnglishTerms => "man",
+            TermsDisplayOption::JapaneseTerms => "wan",
+        }
+        Suit::Pin => "pin",
+        Suit::Sou => "sou",
+        Suit::Special => "",
     }
 }
 
@@ -53,7 +56,7 @@ pub fn get_capitalized(string: &str) -> String {
     string.chars().nth(0).unwrap().to_uppercase().to_string() + &string[1..]
 }
 
-pub fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
+pub fn get_printable_tiles_set_text(tiles: &[Tile], terms_display: TermsDisplayOption) -> String {
     let mut result: String = "".to_string();
 
     if tiles.is_empty() {
@@ -66,16 +69,33 @@ pub fn get_printable_tiles_set_text(tiles: &[Tile]) -> String {
             break;
         }
 
-        if tile.suit != last_suit && result != "" {
-            result += get_printable_suit(last_suit);
+        if result != "" {
+            if tile.suit != last_suit {
+                if last_suit != Suit::Special {
+                    result += " ";
+                    result += get_printable_suit(last_suit, terms_display);
+                    result += ", ";
+                }
+            }
+            else {
+                result += ", ";
+            }
         }
 
         last_suit = tile.suit;
 
-        result += &tile.value.to_string();
+        if tile.suit != Suit::Special {
+            result += &tile.value.to_string();
+        }
+        else {
+            result += tile_to_string(tile, terms_display);
+        }
     }
 
-    result += get_printable_suit(last_suit);
+    if last_suit != Suit::Special {
+        result += " ";
+        result += get_printable_suit(last_suit, terms_display);
+    }
 
     return result;
 }

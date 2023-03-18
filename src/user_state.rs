@@ -1,5 +1,7 @@
 use crate::user_settings::*;
 use crate::game_logic::*;
+use crate::efficiency_calculator::*;
+
 use serde::{Deserialize, Serialize, Serializer, Deserializer};
 
 pub struct UserState {

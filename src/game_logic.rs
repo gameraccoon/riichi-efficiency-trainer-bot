@@ -226,10 +226,3 @@ pub fn discard_tile(game: &mut GameState, hand_index: usize, tile_index: usize) 
     game.discards[hand_index].push(discarded_tile);
     return discarded_tile;
 }
-
-pub struct PreviousMoveData {
-    pub game_state: GameState,
-    pub hand_index: usize,
-    pub full_hand_shanten: i8,
-    pub discarded_tile: Tile,
-}

@@ -541,3 +541,10 @@ pub fn has_potential_for_furiten(waits_table: &TileFrequencyTable, discards: &Ve
 
     return false;
 }
+
+pub struct PreviousMoveData {
+    pub game_state: GameState,
+    pub hand_index: usize,
+    pub full_hand_shanten: i8,
+    pub discarded_tile: Tile,
+}
