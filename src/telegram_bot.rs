@@ -23,7 +23,7 @@ fn start_game(user_state: &mut UserState, static_data: &StaticData) -> Response 
     let game_state = &user_state.game_state.as_ref().unwrap();
     user_state.current_score = 0;
     user_state.best_score = 0;
-    return single_image_response(render_game_state(&game_state, &static_data.render_data.sizes[user_state.settings.display_settings.render_size]), "Dealed new hand".to_string());
+    return single_image_response(render_game_state(&game_state, &static_data.render_data.sizes[user_state.settings.display_settings.render_size]), "Dealt new hand".to_string());
 }
 
 fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &UserSettings) -> String {
@@ -108,13 +108,13 @@ Choose render size (smaller = faster):
             match message_split.next() {
                 Some(value) => {
                     let predefined_hand = make_hand_from_string(&value);
-                    user_state.game_state = generate_dealed_game_with_hand(1, predefined_hand, true);
+                    user_state.game_state = generate_dealt_game_with_hand(1, predefined_hand, true);
                     if user_state.game_state.is_none() {
                         return text_response("Given string doesn't represent a valid hand");
                     }
                 },
                 None => {
-                    user_state.game_state = Some(generate_normal_dealed_game(1, true));
+                    user_state.game_state = Some(generate_normal_dealt_game(1, true));
                 },
             }
             return [start_game(user_state, &static_data)].to_vec();

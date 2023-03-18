@@ -101,7 +101,7 @@ fn populate_full_set() -> Vec<Tile> {
     return result;
 }
 
-pub fn generate_normal_dealed_game(player_count: u32, deal_first_tile: bool) -> GameState {
+pub fn generate_normal_dealt_game(player_count: u32, deal_first_tile: bool) -> GameState {
     let mut tiles = populate_full_set();
     tiles.shuffle(&mut thread_rng());
 
@@ -135,7 +135,7 @@ pub fn generate_normal_dealed_game(player_count: u32, deal_first_tile: bool) -> 
     return game_state;
 }
 
-pub fn generate_dealed_game_with_hand(player_count: u32, predefined_hand: Hand, deal_first_tile: bool) -> Option<GameState> {
+pub fn generate_dealt_game_with_hand(player_count: u32, predefined_hand: Hand, deal_first_tile: bool) -> Option<GameState> {
     if predefined_hand.tiles[0] == EMPTY_TILE {
         return None;
     }
