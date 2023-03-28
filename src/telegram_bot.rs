@@ -39,7 +39,7 @@ fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &U
     let mut result = String::new();
     for discard_info in best_discards {
         let tile_string = tile_to_string(&discard_info.tile, user_settings.display_settings.terms_display);
-        result += &format!("{} has score {}\n",
+        result += &format!("{} - {}\n",
             get_capitalized(&tile_string),
             discard_info.score,
         )
