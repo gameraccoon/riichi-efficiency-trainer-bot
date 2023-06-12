@@ -386,7 +386,11 @@ Choose render size (smaller = faster):
 
         draw_tile_to_hand(&mut game_state, 0);
         answer += &format!(
-            "{} tiles left in the live wall\n",
+            "Drew {}\n{} tiles left in the live wall\n",
+            tile_to_string(
+                &game_state.hands[0].tiles[13],
+                settings.display_settings.terms_display
+            ),
             game_state.live_wall.len()
         );
     }
