@@ -23,6 +23,8 @@ fn start_game(user_state: &mut UserState, static_data: &StaticData) -> Response 
     let game_state = &user_state.game_state.as_ref().unwrap();
     user_state.current_score = 0;
     user_state.best_score = 0;
+    user_state.efficiency_sum = 0.0;
+    user_state.moves = 0;
     return single_image_response(render_game_state(&game_state, &static_data.render_data.sizes[user_state.settings.display_settings.render_size]), "Dealt new hand".to_string());
 }
 
@@ -39,7 +41,7 @@ fn get_move_explanation_text(previous_move: &PreviousMoveData, user_settings: &U
     let mut result = String::new();
     for discard_info in best_discards {
         let tile_string = tile_to_string(&discard_info.tile, user_settings.display_settings.terms_display);
-        result += &format!("{} - {}\n",
+        result += &format!("{}: {}\n",
             get_capitalized(&tile_string),
             discard_info.score,
         )
@@ -202,6 +204,8 @@ Choose render size (smaller = faster):
 
             user_state.best_score += best_discard_scores.score;
             user_state.current_score += current_discard_score;
+            user_state.efficiency_sum += current_discard_score as f32 / best_discard_scores.score as f32;
+            user_state.moves += 1;
             user_state.previous_move.as_mut().unwrap().discarded_tile = tile;
 
             let shanten_calculator = calculate_shanten(&game_state.hands[0].tiles[0..13], &settings.score_settings);
@@ -244,7 +248,7 @@ Choose render size (smaller = faster):
 
                 if shanten <= 0 {
                     if user_state.best_score > 0 {
-                        answer += &format!("Score: {}/{} or {}%", user_state.current_score, user_state.best_score, (100.0 * (user_state.current_score as f32) / (user_state.best_score as f32)).floor());
+                        answer += &format!("Score: {}/{}\nAverage efficiency {}% for {} turns", user_state.current_score, user_state.best_score, (100.0 * (user_state.efficiency_sum / user_state.moves as f32)).floor(), user_state.moves);
                     }
                     else {
                         answer += &format!("Some error occured, best possible score was zero, current score: {}", user_state.current_score);
