@@ -92,7 +92,7 @@ fn text_response(text: &str) -> Vec<Response> {
 
 fn text_response_str(text: String) -> Vec<Response> {
     [Response {
-        text: text,
+        text,
         image: None,
     }]
     .to_vec()
@@ -104,7 +104,7 @@ fn single_image_response(img: ImageBuf, text: String) -> Response {
         .expect("Failed to convert image to png");
     let photo = teloxide::types::InputFile::memory(buf.get_ref().to_vec());
     return Response {
-        text: text,
+        text,
         image: Some(photo),
     };
 }
@@ -273,7 +273,7 @@ Choose render size (smaller = faster):
             user_state.previous_move = Some(PreviousMoveData {
                 game_state: (*game_state).clone(),
                 hand_index: 0,
-                full_hand_shanten: full_hand_shanten,
+                full_hand_shanten,
                 discarded_tile: EMPTY_TILE,
             });
             let tile = discard_tile(&mut game_state, 0, tile_index_in_hand as usize);
@@ -366,7 +366,7 @@ Choose render size (smaller = faster):
                         );
                     } else {
                         answer += &format!(
-                            "Some error occured, best possible score was zero, current score: {}",
+                            "Some error occurred, best possible score was zero, current score: {}",
                             user_state.current_score
                         );
                     }
@@ -430,7 +430,7 @@ fn load_user_states(file_path: &str) -> DashMap<ChatId, UserState> {
 }
 
 fn save_user_state(file_path: &str, chat_id: ChatId, user_state: &UserState) {
-    fs::create_dir_all(std::path::Path::new(file_path).parent().unwrap())
+    fs::create_dir_all(Path::new(file_path).parent().unwrap())
         .expect("The directory can't be created");
     let mut hash_map: HashMap<ChatId, UserSettings>;
     if Path::new(file_path).exists() {
