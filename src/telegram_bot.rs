@@ -147,8 +147,15 @@ Choose render size (smaller = faster):
         Some("/start") => {
             match message_split.next() {
                 Some(hand_string) => {
+                    let (hand_string, discards_msg) = if hand_string.contains("-") {
+                        let mut split = hand_string.split("-");
+                        (split.next().unwrap_or_default(), split.next())
+                    } else {
+                        (hand_string, message_split.next())
+                    };
+
                     let predefined_hand = make_hand_from_string(&hand_string);
-                    let discards = match message_split.next() {
+                    let discards = match discards_msg {
                         Some(discards_string) => make_discards_from_string(&discards_string),
                         None => Vec::new(),
                     };
