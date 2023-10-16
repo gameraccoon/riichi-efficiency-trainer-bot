@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::game_logic::*;
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -11,17 +11,50 @@ pub struct DisplaySettings {
 }
 
 const TILE_ENGLISH: [&str; 37] = [
-    "one of man", "two of man", "three of man", "four of man", "five of man", "six of man", "seven of man", "eight of man", "nine of man", "err",
-    "one of pin", "two of pin", "three of pin", "four of pin", "five of pin", "six of pin", "seven of pin", "eight of pin", "nine of pin", "err",
-    "one of sou", "two of sou", "three of sou", "four of sou", "five of sou", "six of sou", "seven of sou", "eight of sou", "nine of sou", "err",
-    "east wind", "south wind", "west wind", "north wind", "white dragon", "green dragon", "red dragon"
+    "one of man",
+    "two of man",
+    "three of man",
+    "four of man",
+    "five of man",
+    "six of man",
+    "seven of man",
+    "eight of man",
+    "nine of man",
+    "err",
+    "one of pin",
+    "two of pin",
+    "three of pin",
+    "four of pin",
+    "five of pin",
+    "six of pin",
+    "seven of pin",
+    "eight of pin",
+    "nine of pin",
+    "err",
+    "one of sou",
+    "two of sou",
+    "three of sou",
+    "four of sou",
+    "five of sou",
+    "six of sou",
+    "seven of sou",
+    "eight of sou",
+    "nine of sou",
+    "err",
+    "east wind",
+    "south wind",
+    "west wind",
+    "north wind",
+    "white dragon",
+    "green dragon",
+    "red dragon",
 ];
 
 const TILE_JAPANESE: [&str; 37] = [
-    "ii wan", "ryan wan", "san wan", "suu wan", "uu wan", "rou wan", "chii wan", "paa wan", "kyuu wan", "err",
-    "ii pin", "ryan pin", "san pin", "suu pin", "uu pin", "rou pin", "chii pin", "paa pin", "kyuu pin", "err",
-    "ii sou", "ryan sou", "san sou", "suu sou", "uu sou", "rou sou", "chii sou", "paa sou", "kyuu sou", "err",
-    "ton", "nan", "shaa", "pei", "haku", "hatsu", "chun"
+    "ii wan", "ryan wan", "san wan", "suu wan", "uu wan", "rou wan", "chii wan", "paa wan",
+    "kyuu wan", "err", "ii pin", "ryan pin", "san pin", "suu pin", "uu pin", "rou pin", "chii pin",
+    "paa pin", "kyuu pin", "err", "ii sou", "ryan sou", "san sou", "suu sou", "uu sou", "rou sou",
+    "chii sou", "paa sou", "kyuu sou", "err", "ton", "nan", "shaa", "pei", "haku", "hatsu", "chun",
 ];
 
 pub fn get_printable_suit(suit: Suit, terms_display: TermsDisplayOption) -> &'static str {
@@ -29,7 +62,7 @@ pub fn get_printable_suit(suit: Suit, terms_display: TermsDisplayOption) -> &'st
         Suit::Man => match terms_display {
             TermsDisplayOption::EnglishTerms => "man",
             TermsDisplayOption::JapaneseTerms => "wan",
-        }
+        },
         Suit::Pin => "pin",
         Suit::Sou => "sou",
         Suit::Special => "",
@@ -76,8 +109,7 @@ pub fn get_printable_tiles_set_text(tiles: &[Tile], terms_display: TermsDisplayO
                     result += get_printable_suit(last_suit, terms_display);
                     result += ", ";
                 }
-            }
-            else {
+            } else {
                 result += ", ";
             }
         }
@@ -86,8 +118,7 @@ pub fn get_printable_tiles_set_text(tiles: &[Tile], terms_display: TermsDisplayO
 
         if tile.suit != Suit::Special {
             result += &tile.value.to_string();
-        }
-        else {
+        } else {
             result += tile_to_string(tile, terms_display);
         }
     }
@@ -110,20 +141,104 @@ pub fn tile_to_string(tile: &Tile, terms_display: TermsDisplayOption) -> &'stati
 pub fn get_tile_from_input(input: &str) -> Tile {
     // this is very stupid but it seems Rust doesn't yet support initializing constants like this
     let tile_names: HashMap<&str, Tile> = HashMap::from([
-        ("east", Tile{suit: Suit::Special, value: 1}),
-        ("south", Tile{suit: Suit::Special, value: 2}),
-        ("west", Tile{suit: Suit::Special, value: 3}),
-        ("north", Tile{suit: Suit::Special, value: 4}),
-        ("white", Tile{suit: Suit::Special, value: 5}),
-        ("green", Tile{suit: Suit::Special, value: 6}),
-        ("red", Tile{suit: Suit::Special, value: 7}),
-        ("ton", Tile{suit: Suit::Special, value: 1}),
-        ("nan", Tile{suit: Suit::Special, value: 2}),
-        ("shaa", Tile{suit: Suit::Special, value: 3}),
-        ("pei", Tile{suit: Suit::Special, value: 4}),
-        ("haku", Tile{suit: Suit::Special, value: 5}),
-        ("hatsu", Tile{suit: Suit::Special, value: 6}),
-        ("chun", Tile{suit: Suit::Special, value: 7}),
+        (
+            "east",
+            Tile {
+                suit: Suit::Special,
+                value: 1,
+            },
+        ),
+        (
+            "south",
+            Tile {
+                suit: Suit::Special,
+                value: 2,
+            },
+        ),
+        (
+            "west",
+            Tile {
+                suit: Suit::Special,
+                value: 3,
+            },
+        ),
+        (
+            "north",
+            Tile {
+                suit: Suit::Special,
+                value: 4,
+            },
+        ),
+        (
+            "white",
+            Tile {
+                suit: Suit::Special,
+                value: 5,
+            },
+        ),
+        (
+            "green",
+            Tile {
+                suit: Suit::Special,
+                value: 6,
+            },
+        ),
+        (
+            "red",
+            Tile {
+                suit: Suit::Special,
+                value: 7,
+            },
+        ),
+        (
+            "ton",
+            Tile {
+                suit: Suit::Special,
+                value: 1,
+            },
+        ),
+        (
+            "nan",
+            Tile {
+                suit: Suit::Special,
+                value: 2,
+            },
+        ),
+        (
+            "shaa",
+            Tile {
+                suit: Suit::Special,
+                value: 3,
+            },
+        ),
+        (
+            "pei",
+            Tile {
+                suit: Suit::Special,
+                value: 4,
+            },
+        ),
+        (
+            "haku",
+            Tile {
+                suit: Suit::Special,
+                value: 5,
+            },
+        ),
+        (
+            "hatsu",
+            Tile {
+                suit: Suit::Special,
+                value: 6,
+            },
+        ),
+        (
+            "chun",
+            Tile {
+                suit: Suit::Special,
+                value: 7,
+            },
+        ),
     ]);
 
     let suit_names: HashMap<&str, Suit> = HashMap::from([
@@ -182,9 +297,11 @@ pub fn get_tile_from_input(input: &str) -> Tile {
             return EMPTY_TILE;
         }
 
-        return Tile{suit:suit.unwrap(), value:value};
-    }
-    else if input.contains(" ") {
+        return Tile {
+            suit: suit.unwrap(),
+            value: value,
+        };
+    } else if input.contains(" ") {
         let mut parts = Vec::with_capacity(2);
         let mut count = 0;
         for part in input.split_whitespace() {
@@ -211,13 +328,16 @@ pub fn get_tile_from_input(input: &str) -> Tile {
             None => return EMPTY_TILE,
         }
 
-        return Tile{suit: suit, value: value};
+        return Tile {
+            suit: suit,
+            value: value,
+        };
     }
 
     return match tile_names.get(input) {
         Some(found_tile) => *found_tile,
         None => EMPTY_TILE,
-    }
+    };
 }
 
 pub fn make_hand_from_string(hand_string: &str) -> Hand {
@@ -248,8 +368,7 @@ pub fn make_hand_from_string(hand_string: &str) -> Hand {
             tile_position -= 1;
             hand.tiles[tile_position].suit = current_suit.unwrap();
             hand.tiles[tile_position].value = value;
-        }
-        else {
+        } else {
             current_suit = get_suit_from_letter(letter);
         }
     }
@@ -267,9 +386,11 @@ pub fn make_discards_from_string(discards_string: &str) -> Vec<Tile> {
             if current_suit.is_none() {
                 return Vec::new();
             }
-            result.push(Tile{suit: current_suit.unwrap(), value});
-        }
-        else {
+            result.push(Tile {
+                suit: current_suit.unwrap(),
+                value,
+            });
+        } else {
             current_suit = get_suit_from_letter(letter);
         }
     }

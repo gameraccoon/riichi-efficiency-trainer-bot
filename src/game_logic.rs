@@ -3,9 +3,9 @@ use rand::thread_rng;
 
 #[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Suit {
-    Man, // printed as "m"
-    Pin, // printed as "p"
-    Sou, // printed as "s"
+    Man,     // printed as "m"
+    Pin,     // printed as "p"
+    Sou,     // printed as "s"
     Special, // printed as "z", values: 0:Empty 1:East 2:South 3:West 4:North 5:White 6:Green 7:Red
 }
 
@@ -15,7 +15,10 @@ pub struct Tile {
     pub value: u8,
 }
 
-pub const EMPTY_TILE : Tile = Tile{suit: Suit::Special, value: 0};
+pub const EMPTY_TILE: Tile = Tile {
+    suit: Suit::Special,
+    value: 0,
+};
 
 pub type HandTiles = [Tile; 14];
 pub type DeadWall = [Tile; 14];
@@ -25,7 +28,9 @@ pub struct Hand {
     pub tiles: HandTiles,
 }
 
-pub const EMPTY_HAND: Hand = Hand{tiles: [EMPTY_TILE; 14]};
+pub const EMPTY_HAND: Hand = Hand {
+    tiles: [EMPTY_TILE; 14],
+};
 
 // store tiles as cumulative frequency distribution (store count of every possible tile in a hand)
 pub type TileFrequencyTable = [u8; 37];
@@ -55,46 +60,69 @@ pub fn get_tile_index(tile: &Tile) -> usize {
 
 fn get_tile_from_index(index: usize) -> Tile {
     return match index {
-        i if i < (10 as usize) => Tile{suit: Suit::Man, value: (index + 1) as u8},
-        i if i < (20 as usize) => Tile{suit: Suit::Pin, value: (index + 1 - 10) as u8},
-        i if i < (30 as usize) => Tile{suit: Suit::Sou, value: (index + 1 - 20) as u8},
-        _ => Tile{suit: Suit::Special, value: (index + 1 - 30) as u8},
-    }
+        i if i < (10 as usize) => Tile {
+            suit: Suit::Man,
+            value: (index + 1) as u8,
+        },
+        i if i < (20 as usize) => Tile {
+            suit: Suit::Pin,
+            value: (index + 1 - 10) as u8,
+        },
+        i if i < (30 as usize) => Tile {
+            suit: Suit::Sou,
+            value: (index + 1 - 20) as u8,
+        },
+        _ => Tile {
+            suit: Suit::Special,
+            value: (index + 1 - 30) as u8,
+        },
+    };
 }
 
 fn sort_hand(hand: &mut Hand) {
     if hand.tiles[13] == EMPTY_TILE {
         hand.tiles[0..13].sort();
-    }
-    else {
+    } else {
         hand.tiles.sort();
     }
 }
 
 fn populate_full_set() -> Vec<Tile> {
-    let mut result = Vec::with_capacity((9*3 + 7) * 4);
+    let mut result = Vec::with_capacity((9 * 3 + 7) * 4);
 
     for i in 1..=9 {
         for _j in 0..4 {
-            result.push(Tile{suit:Suit::Man, value:i});
+            result.push(Tile {
+                suit: Suit::Man,
+                value: i,
+            });
         }
     }
 
     for i in 1..=9 {
         for _j in 0..4 {
-            result.push(Tile{suit:Suit::Pin, value:i});
+            result.push(Tile {
+                suit: Suit::Pin,
+                value: i,
+            });
         }
     }
 
     for i in 1..=9 {
         for _j in 0..4 {
-            result.push(Tile{suit:Suit::Sou, value:i});
+            result.push(Tile {
+                suit: Suit::Sou,
+                value: i,
+            });
         }
     }
 
     for i in 1..=7 {
         for _j in 0..4 {
-            result.push(Tile{suit:Suit::Special, value:i});
+            result.push(Tile {
+                suit: Suit::Special,
+                value: i,
+            });
         }
     }
 
@@ -106,19 +134,21 @@ pub fn generate_normal_dealt_game(player_count: u32, deal_first_tile: bool) -> G
     tiles.shuffle(&mut thread_rng());
 
     let dead_wall: [Tile; 14] = tiles.split_off(tiles.len() - 14).try_into().unwrap();
-     // 1-3 - dora indicators, 4-7 - uradora indicators
+    // 1-3 - dora indicators, 4-7 - uradora indicators
     let dora_indicators: [Tile; 8] = dead_wall[4..12].try_into().unwrap();
 
     let mut hands = Vec::with_capacity(player_count as usize);
     let mut discards = Vec::with_capacity(player_count as usize);
     for i in 0..player_count {
         let new_tiles = [tiles.split_off(tiles.len() - 13), [EMPTY_TILE].to_vec()].concat();
-        hands.push(Hand{tiles: new_tiles.try_into().unwrap()});
+        hands.push(Hand {
+            tiles: new_tiles.try_into().unwrap(),
+        });
         sort_hand(&mut hands[i as usize]);
         discards.push(Vec::new());
     }
 
-    let mut game_state = GameState{
+    let mut game_state = GameState {
         hands: hands,
         discards: discards,
         total_discards_table: EMPTY_FREQUENCY_TABLE,
@@ -135,7 +165,12 @@ pub fn generate_normal_dealt_game(player_count: u32, deal_first_tile: bool) -> G
     return game_state;
 }
 
-pub fn generate_dealt_game_with_hand_and_discards(player_count: u32, predefined_hand: Hand, predefined_discards: Vec<Tile>, deal_first_tile: bool) -> Option<GameState> {
+pub fn generate_dealt_game_with_hand_and_discards(
+    player_count: u32,
+    predefined_hand: Hand,
+    predefined_discards: Vec<Tile>,
+    deal_first_tile: bool,
+) -> Option<GameState> {
     if predefined_hand.tiles[0] == EMPTY_TILE {
         return None;
     }
@@ -157,7 +192,7 @@ pub fn generate_dealt_game_with_hand_and_discards(player_count: u32, predefined_
         dead_wall[4] = predefined_discards[0];
     }
 
-     // 1-3 - dora indicators, 4-7 - uradora indicators
+    // 1-3 - dora indicators, 4-7 - uradora indicators
     let dora_indicators: [Tile; 8] = dead_wall[4..12].try_into().unwrap();
 
     let mut hands = Vec::with_capacity(player_count as usize);
@@ -168,7 +203,9 @@ pub fn generate_dealt_game_with_hand_and_discards(player_count: u32, predefined_
 
     for i in 1..player_count {
         let new_tiles = [tiles.split_off(tiles.len() - 13), [EMPTY_TILE].to_vec()].concat();
-        hands.push(Hand{tiles: new_tiles.try_into().unwrap()});
+        hands.push(Hand {
+            tiles: new_tiles.try_into().unwrap(),
+        });
         sort_hand(&mut hands[i as usize]);
         discards.push(Vec::new());
     }
@@ -187,7 +224,7 @@ pub fn generate_dealt_game_with_hand_and_discards(player_count: u32, predefined_
         }
     }
 
-    let mut game_state = GameState{
+    let mut game_state = GameState {
         hands: hands,
         discards: discards,
         total_discards_table: EMPTY_FREQUENCY_TABLE,

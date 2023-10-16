@@ -1,9 +1,9 @@
-use core::cmp::{min, max};
+use core::cmp::{max, min};
 use image::io::Reader as ImageReader;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba, SubImage};
 
-use crate::game_logic::*;
 use crate::efficiency_calculator::*;
+use crate::game_logic::*;
 
 pub type ImageBuf = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
@@ -19,11 +19,14 @@ pub struct ImageRenderData {
 }
 
 pub fn load_sized_image_data(path: &str) -> SizedImageData {
-    let atlas = ImageReader::open(path).expect(&format!("file '{}' not found", path)).decode().expect(&format!("file '{}' can't be decoded", path));
+    let atlas = ImageReader::open(path)
+        .expect(&format!("file '{}' not found", path))
+        .decode()
+        .expect(&format!("file '{}' can't be decoded", path));
     let tile_width = atlas.width() / 10;
     let tile_height = atlas.height() / 4;
- 
-    SizedImageData{
+
+    SizedImageData {
         tiles_atlas: atlas,
         tile_width: tile_width,
         tile_height: tile_height,
@@ -32,44 +35,83 @@ pub fn load_sized_image_data(path: &str) -> SizedImageData {
 }
 
 pub fn load_static_render_data() -> ImageRenderData {
-    ImageRenderData{
+    ImageRenderData {
         sizes: [
             load_sized_image_data("resources/tileset_atlas_small.png"),
             load_sized_image_data("resources/tileset_atlas_medium.png"),
-            load_sized_image_data("resources/tileset_atlas_large.png")
-        ]
+            load_sized_image_data("resources/tileset_atlas_large.png"),
+        ],
     }
 }
 
 fn get_tile_image<'a>(tile: &Tile, render_data: &'a SizedImageData) -> SubImage<&'a DynamicImage> {
     let index = get_tile_index(tile);
     let x = (index % 10) as u32;
-    let y = (index / 10) as u32; 
-    render_data.tiles_atlas.view(x * render_data.tile_width, y * render_data.tile_height, render_data.tile_width, render_data.tile_height)
+    let y = (index / 10) as u32;
+    render_data.tiles_atlas.view(
+        x * render_data.tile_width,
+        y * render_data.tile_height,
+        render_data.tile_width,
+        render_data.tile_height,
+    )
 }
 
 fn get_back_side_image<'a>(render_data: &'a SizedImageData) -> SubImage<&'a DynamicImage> {
-    render_data.tiles_atlas.view(9 * render_data.tile_width, 3 * render_data.tile_height, render_data.tile_width, render_data.tile_height)
+    render_data.tiles_atlas.view(
+        9 * render_data.tile_width,
+        3 * render_data.tile_height,
+        render_data.tile_width,
+        render_data.tile_height,
+    )
 }
 
-fn render_hand_to_image(img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage), hand: &Hand, render_data: &SizedImageData, x: u32, y: u32, drawn_tile_gap: u32) {
+fn render_hand_to_image(
+    img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage),
+    hand: &Hand,
+    render_data: &SizedImageData,
+    x: u32,
+    y: u32,
+    drawn_tile_gap: u32,
+) {
     for i in 0..13 {
         let tile_sprite_view = get_tile_image(&hand.tiles[i], &render_data);
-        img.copy_from(&tile_sprite_view.to_image(), x + render_data.tile_width * i as u32, y).unwrap();
+        img.copy_from(
+            &tile_sprite_view.to_image(),
+            x + render_data.tile_width * i as u32,
+            y,
+        )
+        .unwrap();
     }
 
     if hand.tiles[13] != EMPTY_TILE {
         let tile_sprite_view = get_tile_image(&hand.tiles[13], &render_data);
-        img.copy_from(&tile_sprite_view.to_image(), x + render_data.tile_width * 13 + drawn_tile_gap, y).unwrap();
+        img.copy_from(
+            &tile_sprite_view.to_image(),
+            x + render_data.tile_width * 13 + drawn_tile_gap,
+            y,
+        )
+        .unwrap();
     }
 }
 
-fn render_discards_to_image(img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage), tiles: &[Tile], render_data: &SizedImageData, x: u32, y: u32, width: u32) {
+fn render_discards_to_image(
+    img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage),
+    tiles: &[Tile],
+    render_data: &SizedImageData,
+    x: u32,
+    y: u32,
+    width: u32,
+) {
     let mut pos_x = 0;
     let mut pos_y = 0;
     for tile in tiles {
         let tile_sprite_view = get_tile_image(&tile, &render_data);
-        img.copy_from(&tile_sprite_view.to_image(), x + pos_x * render_data.tile_width, y + pos_y * render_data.tile_height).unwrap();
+        img.copy_from(
+            &tile_sprite_view.to_image(),
+            x + pos_x * render_data.tile_width,
+            y + pos_y * render_data.tile_height,
+        )
+        .unwrap();
         pos_x += 1;
         if pos_x >= width {
             pos_y += 1;
@@ -78,17 +120,33 @@ fn render_discards_to_image(img: &mut (impl GenericImageView<Pixel = Rgba<u8>> +
     }
 }
 
-fn render_dora_indicators_to_image(img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage), dora_indicators: &[Tile], render_data: &SizedImageData, x: u32, y: u32) {
+fn render_dora_indicators_to_image(
+    img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage),
+    dora_indicators: &[Tile],
+    render_data: &SizedImageData,
+    x: u32,
+    y: u32,
+) {
     for i in 0..7 {
         if i != 4 {
             let tile_sprite_view = get_back_side_image(&render_data);
-            img.copy_from(&tile_sprite_view.to_image(), x + i * render_data.tile_width, y).unwrap();
+            img.copy_from(
+                &tile_sprite_view.to_image(),
+                x + i * render_data.tile_width,
+                y,
+            )
+            .unwrap();
         }
     }
 
     {
         let tile_sprite_view = get_tile_image(&dora_indicators[0], &render_data);
-        img.copy_from(&tile_sprite_view.to_image(), x + 4 * render_data.tile_width, y).unwrap();
+        img.copy_from(
+            &tile_sprite_view.to_image(),
+            x + 4 * render_data.tile_width,
+            y,
+        )
+        .unwrap();
     }
 }
 
@@ -101,25 +159,54 @@ pub fn render_game_state(game: &GameState, render_data: &SizedImageData) -> Imag
     let mut img = ImageBuffer::from_pixel(total_width, total_height, render_data.bg_color);
     let middle_x = (render_data.tile_width * 14 + drawn_tile_gap) / 2;
 
-    render_hand_to_image(&mut img, &game.hands[0], &render_data, 0, top_offset + render_data.tile_height * 9, drawn_tile_gap);
+    render_hand_to_image(
+        &mut img,
+        &game.hands[0],
+        &render_data,
+        0,
+        top_offset + render_data.tile_height * 9,
+        drawn_tile_gap,
+    );
 
     let discards: &Vec<Tile> = &game.discards[0];
     if !discards.is_empty() {
         let discards_width = min(max(6, 1 + (discards.len() - 1) / 6), 14) as u32;
         let mut discards_top_shift = (7 - (discards.len() - 1) / discards_width as usize) as u32;
         // after this size tiles won't fit normally anymore, reduce the gaps to fit more
-        if discards.len() > 14*6 {
+        if discards.len() > 14 * 6 {
             discards_top_shift = 1;
         }
-        render_discards_to_image(&mut img, &discards, &render_data, middle_x - render_data.tile_width * discards_width / 2, top_offset + discards_top_shift * render_data.tile_height, discards_width);
+        render_discards_to_image(
+            &mut img,
+            &discards,
+            &render_data,
+            middle_x - render_data.tile_width * discards_width / 2,
+            top_offset + discards_top_shift * render_data.tile_height,
+            discards_width,
+        );
     }
 
-    render_dora_indicators_to_image(&mut img, &game.dora_indicators, &render_data, middle_x - render_data.tile_width * 7 / 2, top_offset);
+    render_dora_indicators_to_image(
+        &mut img,
+        &game.dora_indicators,
+        &render_data,
+        middle_x - render_data.tile_width * 7 / 2,
+        top_offset,
+    );
 
     return img;
 }
 
-fn render_explanation_line_to_image(img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage), discard: &Tile, improvements: &[Tile], total_improvements: &[Tile], render_data: &SizedImageData, x: u32, y: u32, gap_after_discard: u32) {
+fn render_explanation_line_to_image(
+    img: &mut (impl GenericImageView<Pixel = Rgba<u8>> + GenericImage),
+    discard: &Tile,
+    improvements: &[Tile],
+    total_improvements: &[Tile],
+    render_data: &SizedImageData,
+    x: u32,
+    y: u32,
+    gap_after_discard: u32,
+) {
     {
         let tile_sprite_view = get_tile_image(&discard, &render_data);
         img.copy_from(&tile_sprite_view.to_image(), x, y).unwrap();
@@ -129,7 +216,12 @@ fn render_explanation_line_to_image(img: &mut (impl GenericImageView<Pixel = Rgb
     for i in 0..total_improvements.len() {
         if total_improvements[i] == improvements[local_i] {
             let tile_sprite_view = get_tile_image(&improvements[local_i], &render_data);
-            img.copy_from(&tile_sprite_view.to_image(), x + gap_after_discard + (i as u32 + 1) * render_data.tile_width, y).unwrap();
+            img.copy_from(
+                &tile_sprite_view.to_image(),
+                x + gap_after_discard + (i as u32 + 1) * render_data.tile_width,
+                y,
+            )
+            .unwrap();
             local_i += 1;
             if local_i == improvements.len() {
                 break;
@@ -138,30 +230,55 @@ fn render_explanation_line_to_image(img: &mut (impl GenericImageView<Pixel = Rgb
     }
 }
 
-pub fn render_move_explanation(previous_move: &PreviousMoveData, score_settings: &ScoreCalculationSettings, render_data: &SizedImageData) -> ImageBuf {
-    assert!(previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE, "Expected move state hand have 14 tiles before the discard");
+pub fn render_move_explanation(
+    previous_move: &PreviousMoveData,
+    score_settings: &ScoreCalculationSettings,
+    render_data: &SizedImageData,
+) -> ImageBuf {
+    assert!(
+        previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE,
+        "Expected move state hand have 14 tiles before the discard"
+    );
 
     let horizontal_gap = render_data.tile_width / 4;
     let vertical_gap = render_data.tile_height / 4;
     let mut visible_tiles = get_visible_tiles(&previous_move.game_state, previous_move.hand_index);
-    let best_discards = calculate_best_discards_ukeire2(&previous_move.game_state.hands[previous_move.hand_index].tiles, previous_move.full_hand_shanten, &mut visible_tiles, &score_settings);
+    let best_discards = calculate_best_discards_ukeire2(
+        &previous_move.game_state.hands[previous_move.hand_index].tiles,
+        previous_move.full_hand_shanten,
+        &mut visible_tiles,
+        &score_settings,
+    );
 
     let mut total_improvements: Vec<Tile> = Vec::new();
     for discard_info in &best_discards {
         for improvement in &discard_info.tiles_improving_shanten {
             // todo: linear search should probably be more efficient here
             match total_improvements.binary_search(&improvement) {
-                Ok(_pos) => {},
+                Ok(_pos) => {}
                 Err(pos) => total_improvements.insert(pos, *improvement),
             }
         }
     }
 
-    let mut img = ImageBuffer::from_pixel(horizontal_gap * 3 + (total_improvements.len() as u32 + 1) * render_data.tile_width, vertical_gap + best_discards.len() as u32 * (render_data.tile_height + vertical_gap), render_data.bg_color);
+    let mut img = ImageBuffer::from_pixel(
+        horizontal_gap * 3 + (total_improvements.len() as u32 + 1) * render_data.tile_width,
+        vertical_gap + best_discards.len() as u32 * (render_data.tile_height + vertical_gap),
+        render_data.bg_color,
+    );
 
     let mut pos_y = vertical_gap;
     for discard_info in best_discards {
-        render_explanation_line_to_image(&mut img, &discard_info.tile, &discard_info.tiles_improving_shanten, &total_improvements, &render_data, horizontal_gap, pos_y, horizontal_gap);
+        render_explanation_line_to_image(
+            &mut img,
+            &discard_info.tile,
+            &discard_info.tiles_improving_shanten,
+            &total_improvements,
+            &render_data,
+            horizontal_gap,
+            pos_y,
+            horizontal_gap,
+        );
         pos_y += render_data.tile_height + vertical_gap;
     }
 

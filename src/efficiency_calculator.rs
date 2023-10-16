@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::game_logic::*;
+use serde::{Deserialize, Serialize};
 use std::cmp::max;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -12,7 +12,10 @@ fn set_max(element: &mut u8, value: u8) {
     *element = max(*element, value);
 }
 
-fn append_frequency_table(target_table: &mut TileFrequencyTable, addition_table: &TileFrequencyTable) {
+fn append_frequency_table(
+    target_table: &mut TileFrequencyTable,
+    addition_table: &TileFrequencyTable,
+) {
     for i in 0..target_table.len() {
         if addition_table[i] > 0 {
             set_max(&mut target_table[i], 2);
@@ -60,18 +63,20 @@ impl ShantenCalculator {
 
     fn remove_potential_sets(&mut self, mut i: usize) {
         // Skip to the next tile that exists in the hand
-        while i < self.hand_table.len() && self.hand_table[i] == 0 { i += 1; }
+        while i < self.hand_table.len() && self.hand_table[i] == 0 {
+            i += 1;
+        }
 
         if i >= self.hand_table.len() {
             // We've checked everything. See if this shanten is better than the current best.
-            let current_shanten = (8 - (self.complete_sets * 2) - self.partial_sets - self.pair) as i8;
+            let current_shanten =
+                (8 - (self.complete_sets * 2) - self.partial_sets - self.pair) as i8;
             if current_shanten < self.best_shanten {
                 self.best_shanten = current_shanten;
                 self.best_waits = EMPTY_FREQUENCY_TABLE;
                 append_frequency_table(&mut self.best_waits, &self.waits_table);
                 self.append_single_tiles_left();
-            }
-            else if current_shanten == self.best_shanten {
+            } else if current_shanten == self.best_shanten {
                 append_frequency_table(&mut self.best_waits, &self.waits_table);
                 self.append_single_tiles_left();
             }
@@ -97,7 +102,8 @@ impl ShantenCalculator {
                 let right_edge_wait = i % 10 == 7;
 
                 self.partial_sets += 1;
-                self.hand_table[i] -= 1; self.hand_table[i + 1] -= 1;
+                self.hand_table[i] -= 1;
+                self.hand_table[i + 1] -= 1;
                 if !left_edge_wait {
                     self.waits_table[i - 1] += 1;
                 }
@@ -111,18 +117,21 @@ impl ShantenCalculator {
                 if !right_edge_wait {
                     self.waits_table[i + 2] -= 1;
                 }
-                self.hand_table[i] += 1; self.hand_table[i + 1] += 1;
+                self.hand_table[i] += 1;
+                self.hand_table[i + 1] += 1;
                 self.partial_sets -= 1;
             }
 
             // Closed wait protorun
             if i < 30 && i % 10 <= 7 && self.hand_table[i + 2] != 0 {
                 self.partial_sets += 1;
-                self.hand_table[i] -= 1; self.hand_table[i + 2] -= 1;
+                self.hand_table[i] -= 1;
+                self.hand_table[i + 2] -= 1;
                 self.waits_table[i + 1] += 1;
                 self.remove_potential_sets(i);
                 self.waits_table[i + 1] -= 1;
-                self.hand_table[i] += 1; self.hand_table[i + 2] += 1;
+                self.hand_table[i] += 1;
+                self.hand_table[i + 2] += 1;
                 self.partial_sets -= 1;
             }
         }
@@ -133,7 +142,9 @@ impl ShantenCalculator {
 
     fn remove_completed_sets(&mut self, mut i: usize) {
         // Skip to the next tile that exists in the hand.
-        while i < self.hand_table.len() && self.hand_table[i] == 0 { i += 1; }
+        while i < self.hand_table.len() && self.hand_table[i] == 0 {
+            i += 1;
+        }
 
         if i >= self.hand_table.len() {
             // We've gone through the whole hand, now check for partial sets.
@@ -153,9 +164,13 @@ impl ShantenCalculator {
         // Sequence
         if i < 30 && self.hand_table[i + 1] != 0 && self.hand_table[i + 2] != 0 {
             self.complete_sets += 1;
-            self.hand_table[i] -= 1; self.hand_table[i + 1] -= 1; self.hand_table[i + 2] -= 1;
+            self.hand_table[i] -= 1;
+            self.hand_table[i + 1] -= 1;
+            self.hand_table[i + 2] -= 1;
             self.remove_completed_sets(i);
-            self.hand_table[i] += 1; self.hand_table[i + 1] += 1; self.hand_table[i + 2] += 1;
+            self.hand_table[i] += 1;
+            self.hand_table[i + 1] += 1;
+            self.hand_table[i + 2] += 1;
             self.complete_sets -= 1;
         }
 
@@ -184,14 +199,15 @@ impl ShantenCalculator {
         let mut unique_tile_count = 0;
 
         for i in 0..self.hand_table.len() {
-            if self.hand_table[i] == 0 { continue };
+            if self.hand_table[i] == 0 {
+                continue;
+            };
 
             unique_tile_count += 1;
 
             if self.hand_table[i] >= 2 {
                 pair_count += 1;
-            }
-            else {
+            } else {
                 self.waits_table[i] += 2;
             }
         }
@@ -206,8 +222,7 @@ impl ShantenCalculator {
             self.best_shanten = shanten;
             self.best_waits = EMPTY_FREQUENCY_TABLE;
             append_frequency_table(&mut self.best_waits, &self.waits_table);
-        }
-        else if shanten == self.best_shanten {
+        } else if shanten == self.best_shanten {
             append_frequency_table(&mut self.best_waits, &self.waits_table);
         }
         self.waits_table = EMPTY_FREQUENCY_TABLE;
@@ -217,7 +232,8 @@ impl ShantenCalculator {
         let mut unique_tile_count = 0;
         let mut have_pair = false;
 
-        const TERMINALS_AND_HONORS_IDX: [usize; 13] = [0, 8, 10, 18, 20, 28, 30, 31, 32, 33, 34, 35, 36];
+        const TERMINALS_AND_HONORS_IDX: [usize; 13] =
+            [0, 8, 10, 18, 20, 28, 30, 31, 32, 33, 34, 35, 36];
 
         for i in TERMINALS_AND_HONORS_IDX {
             if self.hand_table[i] != 0 {
@@ -225,12 +241,10 @@ impl ShantenCalculator {
 
                 if self.hand_table[i] >= 2 {
                     have_pair = true;
-                }
-                else {
+                } else {
                     self.waits_table[i] += 1;
                 }
-            }
-            else {
+            } else {
                 self.waits_table[i] += 2;
             }
         }
@@ -251,8 +265,7 @@ impl ShantenCalculator {
             }
 
             append_frequency_table(&mut self.best_waits, &self.waits_table);
-        }
-        else if shanten == self.best_shanten {
+        } else if shanten == self.best_shanten {
             append_frequency_table(&mut self.best_waits, &self.waits_table);
         }
         self.waits_table = EMPTY_FREQUENCY_TABLE;
@@ -270,7 +283,7 @@ impl ShantenCalculator {
 }
 
 pub fn calculate_shanten(tiles: &[Tile], settings: &ScoreCalculationSettings) -> ShantenCalculator {
-    let mut calculator = ShantenCalculator{
+    let mut calculator = ShantenCalculator {
         hand_table: make_frequency_table(&tiles),
         waits_table: EMPTY_FREQUENCY_TABLE,
         complete_sets: 0,
@@ -316,7 +329,10 @@ pub fn get_visible_tiles(game: &GameState, visible_hand_index: usize) -> TileFre
     return result;
 }
 
-pub fn find_potentially_available_tile_count(visible_tiles: &TileFrequencyTable, tiles: &[Tile]) -> u8 {
+pub fn find_potentially_available_tile_count(
+    visible_tiles: &TileFrequencyTable,
+    tiles: &[Tile],
+) -> u8 {
     let mut result = 0;
     let mut previous_tile = EMPTY_TILE;
     for tile in tiles {
@@ -331,8 +347,16 @@ pub fn find_potentially_available_tile_count(visible_tiles: &TileFrequencyTable,
     return result;
 }
 
-pub fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], current_shanten: i8, settings: &ScoreCalculationSettings) -> Vec<Tile> {
-    assert!(hand_tiles.len() == 13, "filter_tiles_improving_shanten is expected to be called on 13 tiles");
+pub fn filter_tiles_improving_shanten(
+    hand_tiles: &[Tile],
+    tiles: &[Tile],
+    current_shanten: i8,
+    settings: &ScoreCalculationSettings,
+) -> Vec<Tile> {
+    assert!(
+        hand_tiles.len() == 13,
+        "filter_tiles_improving_shanten is expected to be called on 13 tiles"
+    );
 
     let mut extended_hand = [hand_tiles.to_vec(), [EMPTY_TILE].to_vec()].concat();
 
@@ -351,8 +375,15 @@ pub fn filter_tiles_improving_shanten(hand_tiles: &[Tile], tiles: &[Tile], curre
     return result;
 }
 
-pub fn filter_tiles_finishing_hand(hand_tiles: &[Tile], tiles: &[Tile], settings: &ScoreCalculationSettings) -> Vec<Tile> {
-    assert!(hand_tiles.len() == 13, "filter_tiles_improving_shanten is expected to be called on 13 tiles");
+pub fn filter_tiles_finishing_hand(
+    hand_tiles: &[Tile],
+    tiles: &[Tile],
+    settings: &ScoreCalculationSettings,
+) -> Vec<Tile> {
+    assert!(
+        hand_tiles.len() == 13,
+        "filter_tiles_improving_shanten is expected to be called on 13 tiles"
+    );
 
     let mut extended_hand = [hand_tiles.to_vec(), [EMPTY_TILE].to_vec()].concat();
 
@@ -379,22 +410,26 @@ pub struct WeightedDiscard {
 
 fn sort_weighted_discards(weighted_discards: &mut [WeightedDiscard]) {
     weighted_discards.sort_by(|a: &WeightedDiscard, b: &WeightedDiscard| {
-        if a.score > b.score
-        {
+        if a.score > b.score {
             std::cmp::Ordering::Less
-        }
-        else if a.score < b.score
-        {
+        } else if a.score < b.score {
             std::cmp::Ordering::Greater
-        }
-        else {
+        } else {
             std::cmp::Ordering::Equal
         }
     });
 }
 
-pub fn calculate_best_discards_ukeire1(hand_tiles: &[Tile], minimal_shanten: i8, visible_tiles: &TileFrequencyTable, settings: &ScoreCalculationSettings) -> Vec<WeightedDiscard> {
-    assert!(hand_tiles[13] != EMPTY_TILE, "calculate_best_discards_ukeire1 expected hand with 14 tiles");
+pub fn calculate_best_discards_ukeire1(
+    hand_tiles: &[Tile],
+    minimal_shanten: i8,
+    visible_tiles: &TileFrequencyTable,
+    settings: &ScoreCalculationSettings,
+) -> Vec<WeightedDiscard> {
+    assert!(
+        hand_tiles[13] != EMPTY_TILE,
+        "calculate_best_discards_ukeire1 expected hand with 14 tiles"
+    );
 
     let mut possible_discards = Vec::with_capacity(14);
     let mut previous_tile = EMPTY_TILE;
@@ -412,10 +447,16 @@ pub fn calculate_best_discards_ukeire1(hand_tiles: &[Tile], minimal_shanten: i8,
         let calculator = calculate_shanten(&reduced_tiles, &settings);
 
         if calculator.get_calculated_shanten() == minimal_shanten {
-            let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten, &settings);
-            let available_tiles = find_potentially_available_tile_count(&visible_tiles, &tiles_improving_shanten);
+            let tiles_improving_shanten = filter_tiles_improving_shanten(
+                &reduced_tiles,
+                &convert_frequency_table_to_flat_vec(&calculator.best_waits),
+                minimal_shanten,
+                &settings,
+            );
+            let available_tiles =
+                find_potentially_available_tile_count(&visible_tiles, &tiles_improving_shanten);
             if available_tiles > 0 {
-                possible_discards.push(WeightedDiscard{
+                possible_discards.push(WeightedDiscard {
                     tile: full_hand[i],
                     tiles_improving_shanten: tiles_improving_shanten,
                     score: available_tiles as u32,
@@ -431,11 +472,24 @@ pub fn calculate_best_discards_ukeire1(hand_tiles: &[Tile], minimal_shanten: i8,
     return possible_discards;
 }
 
-pub fn calculate_best_discards_ukeire2(hand_tiles: &[Tile], minimal_shanten: i8, visible_tiles: &mut TileFrequencyTable, settings: &ScoreCalculationSettings) -> Vec<WeightedDiscard> {
-    assert!(hand_tiles[13] != EMPTY_TILE, "calculate_best_discards_ukeire2 expected hand with 14 tiles");
+pub fn calculate_best_discards_ukeire2(
+    hand_tiles: &[Tile],
+    minimal_shanten: i8,
+    visible_tiles: &mut TileFrequencyTable,
+    settings: &ScoreCalculationSettings,
+) -> Vec<WeightedDiscard> {
+    assert!(
+        hand_tiles[13] != EMPTY_TILE,
+        "calculate_best_discards_ukeire2 expected hand with 14 tiles"
+    );
 
     if minimal_shanten <= 0 {
-        return calculate_best_discards_ukeire1(&hand_tiles, minimal_shanten, &visible_tiles, &settings);
+        return calculate_best_discards_ukeire1(
+            &hand_tiles,
+            minimal_shanten,
+            &visible_tiles,
+            &settings,
+        );
     }
 
     let mut possible_discards = Vec::with_capacity(14);
@@ -454,7 +508,12 @@ pub fn calculate_best_discards_ukeire2(hand_tiles: &[Tile], minimal_shanten: i8,
         let calculator = calculate_shanten(&reduced_tiles, &settings);
 
         if calculator.get_calculated_shanten() == minimal_shanten {
-            let tiles_improving_shanten = filter_tiles_improving_shanten(&reduced_tiles, &convert_frequency_table_to_flat_vec(&calculator.best_waits), minimal_shanten, &settings);
+            let tiles_improving_shanten = filter_tiles_improving_shanten(
+                &reduced_tiles,
+                &convert_frequency_table_to_flat_vec(&calculator.best_waits),
+                minimal_shanten,
+                &settings,
+            );
             let mut score: u32 = 0;
             for tile in &tiles_improving_shanten {
                 let tile_index = get_tile_index(tile);
@@ -464,7 +523,12 @@ pub fn calculate_best_discards_ukeire2(hand_tiles: &[Tile], minimal_shanten: i8,
                 }
                 reduced_tiles.push(*tile);
                 visible_tiles[tile_index] += 1;
-                let weighted_discards = calculate_best_discards_ukeire1(&reduced_tiles, minimal_shanten - 1, visible_tiles, settings);
+                let weighted_discards = calculate_best_discards_ukeire1(
+                    &reduced_tiles,
+                    minimal_shanten - 1,
+                    visible_tiles,
+                    settings,
+                );
                 if !weighted_discards.is_empty() {
                     score += weighted_discards[0].score * (available_tiles as u32);
                 }
@@ -472,7 +536,7 @@ pub fn calculate_best_discards_ukeire2(hand_tiles: &[Tile], minimal_shanten: i8,
                 reduced_tiles.pop();
             }
 
-            possible_discards.push(WeightedDiscard{
+            possible_discards.push(WeightedDiscard {
                 tile: full_hand[i],
                 tiles_improving_shanten: tiles_improving_shanten,
                 score: score,
@@ -495,7 +559,10 @@ pub struct DiscardScores {
 
 pub fn get_best_discard_scores(best_discards: &Vec<WeightedDiscard>) -> DiscardScores {
     if !best_discards.is_empty() {
-        let mut result = DiscardScores{ tiles: Vec::new(), score: best_discards[0].score };
+        let mut result = DiscardScores {
+            tiles: Vec::new(),
+            score: best_discards[0].score,
+        };
         for tile_info in best_discards {
             if tile_info.score < result.score {
                 break;
@@ -506,7 +573,10 @@ pub fn get_best_discard_scores(best_discards: &Vec<WeightedDiscard>) -> DiscardS
         return result;
     }
 
-    return DiscardScores{ tiles: Vec::new(), score: 0 };
+    return DiscardScores {
+        tiles: Vec::new(),
+        score: 0,
+    };
 }
 
 pub fn get_discard_score(best_discards: &Vec<WeightedDiscard>, tile: &Tile) -> u32 {

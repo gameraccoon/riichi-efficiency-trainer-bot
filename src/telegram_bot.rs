@@ -91,11 +91,7 @@ fn text_response(text: &str) -> Vec<Response> {
 }
 
 fn text_response_str(text: String) -> Vec<Response> {
-    [Response {
-        text,
-        image: None,
-    }]
-    .to_vec()
+    [Response { text, image: None }].to_vec()
 }
 
 fn single_image_response(img: ImageBuf, text: String) -> Response {
@@ -159,7 +155,12 @@ Choose render size (smaller = faster):
                         Some(discards_string) => make_discards_from_string(&discards_string),
                         None => Vec::new(),
                     };
-                    user_state.game_state = generate_dealt_game_with_hand_and_discards(1, predefined_hand, discards, true);
+                    user_state.game_state = generate_dealt_game_with_hand_and_discards(
+                        1,
+                        predefined_hand,
+                        discards,
+                        true,
+                    );
                     if user_state.game_state.is_none() {
                         return text_response("Given string doesn't represent a valid hand");
                     }

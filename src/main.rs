@@ -1,11 +1,11 @@
-mod game_logic;
 mod efficiency_calculator;
+mod game_logic;
+mod image_render;
+mod input_output;
+mod telegram_bot;
+mod translations;
 mod user_settings;
 mod user_state;
-mod input_output;
-mod translations;
-mod image_render;
-mod telegram_bot;
 
 extern crate rand;
 

@@ -1,8 +1,8 @@
-use crate::user_settings::*;
-use crate::game_logic::*;
 use crate::efficiency_calculator::*;
+use crate::game_logic::*;
+use crate::user_settings::*;
 
-use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub struct UserState {
     pub game_state: Option<GameState>,
@@ -36,7 +36,7 @@ impl<'de> Deserialize<'de> for UserState {
 }
 
 pub fn get_default_user_state() -> UserState {
-    UserState{
+    UserState {
         game_state: None,
         current_score: 0,
         best_score: 0,

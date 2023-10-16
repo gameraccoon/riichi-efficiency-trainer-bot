@@ -9,8 +9,8 @@ pub struct UserSettings {
 }
 
 pub fn get_default_settings() -> UserSettings {
-    UserSettings{
-        display_settings: DisplaySettings{
+    UserSettings {
+        display_settings: DisplaySettings {
             terms_display: TermsDisplayOption::EnglishTerms,
             language_key: "ene".to_string(),
             render_size: 1,
