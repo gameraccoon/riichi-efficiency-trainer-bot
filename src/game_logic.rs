@@ -135,7 +135,7 @@ pub fn generate_normal_dealt_game(player_count: u32, deal_first_tile: bool) -> G
     return game_state;
 }
 
-pub fn generate_dealt_game_with_hand(player_count: u32, predefined_hand: Hand, deal_first_tile: bool) -> Option<GameState> {
+pub fn generate_dealt_game_with_hand_and_discards(player_count: u32, predefined_hand: Hand, predefined_discards: Vec<Tile>, deal_first_tile: bool) -> Option<GameState> {
     if predefined_hand.tiles[0] == EMPTY_TILE {
         return None;
     }
@@ -151,7 +151,12 @@ pub fn generate_dealt_game_with_hand(player_count: u32, predefined_hand: Hand, d
 
     tiles.shuffle(&mut thread_rng());
 
-    let dead_wall: [Tile; 14] = tiles.split_off(tiles.len() - 14).try_into().unwrap();
+    let mut dead_wall: [Tile; 14] = tiles.split_off(tiles.len() - 14).try_into().unwrap();
+
+    if predefined_discards.len() > 0 && predefined_discards[0] != EMPTY_TILE {
+        dead_wall[4] = predefined_discards[0];
+    }
+
      // 1-3 - dora indicators, 4-7 - uradora indicators
     let dora_indicators: [Tile; 8] = dead_wall[4..12].try_into().unwrap();
 
@@ -166,6 +171,20 @@ pub fn generate_dealt_game_with_hand(player_count: u32, predefined_hand: Hand, d
         hands.push(Hand{tiles: new_tiles.try_into().unwrap()});
         sort_hand(&mut hands[i as usize]);
         discards.push(Vec::new());
+    }
+
+    {
+        let mut player_index = 0;
+        for i in 1..predefined_discards.len() {
+            let tile = predefined_discards[i];
+            if tile != EMPTY_TILE {
+                // find first tile in tiles
+                let index = tiles.iter().position(|&t| t == tile).unwrap();
+                tiles.remove(index);
+                discards[player_index].push(tile);
+                player_index = (player_index + 1) % player_count as usize;
+            }
+        }
     }
 
     let mut game_state = GameState{

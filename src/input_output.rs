@@ -255,3 +255,26 @@ pub fn make_hand_from_string(hand_string: &str) -> Hand {
     }
     return hand;
 }
+
+pub fn make_discards_from_string(discards_string: &str) -> Vec<Tile> {
+    let mut result = Vec::new();
+
+    let mut current_suit: Option<Suit> = None;
+    for i in (0..discards_string.len()).rev() {
+        let letter = discards_string.chars().nth(i).unwrap();
+        let value = letter.to_string().parse().unwrap_or(0);
+        if value > 0 {
+            if current_suit.is_none() {
+                return Vec::new();
+            }
+            result.push(Tile{suit: current_suit.unwrap(), value});
+        }
+        else {
+            current_suit = get_suit_from_letter(letter);
+        }
+    }
+
+    result.reverse();
+
+    return result;
+}

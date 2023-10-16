@@ -146,9 +146,13 @@ Choose render size (smaller = faster):
     match message_split.next() {
         Some("/start") => {
             match message_split.next() {
-                Some(value) => {
-                    let predefined_hand = make_hand_from_string(&value);
-                    user_state.game_state = generate_dealt_game_with_hand(1, predefined_hand, true);
+                Some(hand_string) => {
+                    let predefined_hand = make_hand_from_string(&hand_string);
+                    let discards = match message_split.next() {
+                        Some(discards_string) => make_discards_from_string(&discards_string),
+                        None => Vec::new(),
+                    };
+                    user_state.game_state = generate_dealt_game_with_hand_and_discards(1, predefined_hand, discards, true);
                     if user_state.game_state.is_none() {
                         return text_response("Given string doesn't represent a valid hand");
                     }
