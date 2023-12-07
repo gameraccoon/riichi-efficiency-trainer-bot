@@ -310,7 +310,7 @@ pub fn get_tile_from_input(input: &str) -> Tile {
             }
             count += 1;
 
-            parts.push(part.clone());
+            parts.push(part);
         }
         if parts.len() != 2 {
             return EMPTY_TILE;

@@ -136,7 +136,7 @@ Choose render size (smaller = faster):
 
     let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
-    let mut settings = &mut user_state.settings;
+    let settings = &mut user_state.settings;
     let mut message_split = message_text.split_whitespace();
 
     match message_split.next() {
