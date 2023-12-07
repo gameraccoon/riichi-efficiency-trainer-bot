@@ -58,27 +58,6 @@ pub fn get_tile_index(tile: &Tile) -> usize {
     return (tile.value + shift - 1) as usize;
 }
 
-fn get_tile_from_index(index: usize) -> Tile {
-    return match index {
-        i if i < (10 as usize) => Tile {
-            suit: Suit::Man,
-            value: (index + 1) as u8,
-        },
-        i if i < (20 as usize) => Tile {
-            suit: Suit::Pin,
-            value: (index + 1 - 10) as u8,
-        },
-        i if i < (30 as usize) => Tile {
-            suit: Suit::Sou,
-            value: (index + 1 - 20) as u8,
-        },
-        _ => Tile {
-            suit: Suit::Special,
-            value: (index + 1 - 30) as u8,
-        },
-    };
-}
-
 fn sort_hand(hand: &mut Hand) {
     if hand.tiles[13] == EMPTY_TILE {
         hand.tiles[0..13].sort();
@@ -249,19 +228,6 @@ pub fn make_frequency_table(tiles: &[Tile]) -> TileFrequencyTable {
             panic!("Incorrect tile in shanten calculation {:?}", tiles);
         }
         result[get_tile_index(tile)] += 1
-    }
-
-    return result;
-}
-
-pub fn convert_frequency_table_to_flat_vec(frequency_table: &TileFrequencyTable) -> Vec<Tile> {
-    let mut result = Vec::new();
-
-    for i in 0..frequency_table.len() {
-        if frequency_table[i] > 0 {
-            let tile = get_tile_from_index(i);
-            result.push(tile);
-        }
     }
 
     return result;

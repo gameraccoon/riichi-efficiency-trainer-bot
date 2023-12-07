@@ -2,6 +2,9 @@ use crate::game_logic::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 
+// only for tests
+use crate::input_output;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ScoreCalculationSettings {
     pub allow_kokushi: bool,
@@ -612,9 +615,103 @@ pub fn has_potential_for_furiten(waits_table: &TileFrequencyTable, discards: &Ve
     return false;
 }
 
+fn get_tile_from_index(index: usize) -> Tile {
+    return match index {
+        i if i < (10 as usize) => Tile {
+            suit: Suit::Man,
+            value: (index + 1) as u8,
+        },
+        i if i < (20 as usize) => Tile {
+            suit: Suit::Pin,
+            value: (index + 1 - 10) as u8,
+        },
+        i if i < (30 as usize) => Tile {
+            suit: Suit::Sou,
+            value: (index + 1 - 20) as u8,
+        },
+        _ => Tile {
+            suit: Suit::Special,
+            value: (index + 1 - 30) as u8,
+        },
+    };
+}
+
+pub fn convert_frequency_table_to_flat_vec(frequency_table: &TileFrequencyTable) -> Vec<Tile> {
+    let mut result = Vec::new();
+
+    for i in 0..frequency_table.len() {
+        if frequency_table[i] > 0 {
+            let tile = get_tile_from_index(i);
+            result.push(tile);
+        }
+    }
+
+    return result;
+}
+
 pub struct PreviousMoveData {
     pub game_state: GameState,
     pub hand_index: usize,
     pub full_hand_shanten: i8,
     pub discarded_tile: Tile,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculator_defaults() {
+        let calculator = ShantenCalculator {
+            hand_table: EMPTY_FREQUENCY_TABLE,
+            waits_table: EMPTY_FREQUENCY_TABLE,
+            complete_sets: 0,
+            pair: 0,
+            partial_sets: 0,
+            best_shanten: MAX_SHANTEN,
+            best_waits: EMPTY_FREQUENCY_TABLE,
+        };
+
+        assert_eq!(calculator.hand_table, EMPTY_FREQUENCY_TABLE);
+        assert_eq!(calculator.waits_table, EMPTY_FREQUENCY_TABLE);
+        assert_eq!(calculator.complete_sets, 0);
+        assert_eq!(calculator.pair, 0);
+        assert_eq!(calculator.partial_sets, 0);
+        assert_eq!(calculator.best_shanten, MAX_SHANTEN);
+        assert_eq!(calculator.best_waits, EMPTY_FREQUENCY_TABLE);
+    }
+
+    #[test]
+    fn test_example_hand_one_shanten() {
+        let hand = input_output::make_hand_from_string("123456789m1334p");
+        let calculator = calculate_shanten(
+            &hand.tiles[0..13],
+            &ScoreCalculationSettings {
+                allow_kokushi: true,
+                allow_chiitoitsu: true,
+            },
+        );
+        assert_eq!(calculator.get_calculated_shanten(), 1);
+        assert_eq!(
+            convert_frequency_table_to_flat_vec(&calculator.best_waits),
+            input_output::make_tile_sequence_from_string("123456p")
+        );
+    }
+
+    #[test]
+    fn test_example_hand_two_shanten() {
+        let hand = input_output::make_hand_from_string("122456789m1369p");
+        let calculator = calculate_shanten(
+            &hand.tiles[0..13],
+            &ScoreCalculationSettings {
+                allow_kokushi: true,
+                allow_chiitoitsu: true,
+            },
+        );
+        assert_eq!(calculator.get_calculated_shanten(), 2);
+        assert_eq!(
+            convert_frequency_table_to_flat_vec(&calculator.best_waits),
+            input_output::make_tile_sequence_from_string("1234m2456789p")
+        );
+    }
 }

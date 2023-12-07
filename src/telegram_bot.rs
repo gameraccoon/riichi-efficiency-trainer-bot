@@ -152,7 +152,7 @@ Choose render size (smaller = faster):
 
                     let predefined_hand = make_hand_from_string(&hand_string);
                     let discards = match discards_msg {
-                        Some(discards_string) => make_discards_from_string(&discards_string),
+                        Some(discards_string) => make_tile_sequence_from_string(&discards_string),
                         None => Vec::new(),
                     };
                     user_state.game_state = generate_dealt_game_with_hand_and_discards(
