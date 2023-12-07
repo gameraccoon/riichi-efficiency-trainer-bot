@@ -2,8 +2,8 @@ use core::cmp::{max, min};
 use image::io::Reader as ImageReader;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba, SubImage};
 
-use crate::efficiency_calculator::*;
 use crate::game_logic::*;
+use crate::ukeire_calculator::*;
 
 pub type ImageBuf = ImageBuffer<Rgba<u8>, Vec<u8>>;
 

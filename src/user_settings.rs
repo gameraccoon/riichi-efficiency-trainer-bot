@@ -1,5 +1,5 @@
-use crate::efficiency_calculator::ScoreCalculationSettings;
 use crate::input_output::*;
+use crate::ukeire_calculator::ScoreCalculationSettings;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize)]

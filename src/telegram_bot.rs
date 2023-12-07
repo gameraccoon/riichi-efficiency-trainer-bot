@@ -6,11 +6,11 @@ use std::path::Path;
 use std::sync::Arc;
 use teloxide::prelude::*;
 
-use crate::efficiency_calculator::*;
 use crate::game_logic::*;
 use crate::image_render::*;
 use crate::input_output::*;
 use crate::translations::*;
+use crate::ukeire_calculator::*;
 use crate::user_settings::*;
 use crate::user_state::*;
 
