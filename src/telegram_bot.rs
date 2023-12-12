@@ -249,6 +249,14 @@ Choose render size (smaller = faster):
             user_state.settings_unsaved = true;
             return text_response("Set render size to large");
         }
+        Some("/info_score") => {
+            return text_response("The bot uses ukeire2 as the score, \
+            which is calculated as a sum of multiplications of all ukeire that each potential \
+            improvement can give multiplayed by the number of tiles that can give that improvement.\n\n\
+            In simpler worlds it is a score that takes one step further than simply ukeire.\n\n\
+            When calculating the score the bot takes into account the number of tiles left in \
+            the live wall and the number of tiles discarded by the player.");
+        }
         Some(_) => {}
         None => {}
     }
