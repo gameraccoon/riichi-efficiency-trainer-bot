@@ -128,6 +128,7 @@ Choose terminology:
 Choose rules:
 /toggle_chiitoi - turn on/off counting for Chiitoitsu
 /toggle_kokushi - turn on/off counting for Kokushi musou
+/toggle_honors - turn on/off honor tiles (from the next game)
 
 Choose render size (smaller = faster):
 /render_small - small size
@@ -159,14 +160,15 @@ Choose render size (smaller = faster):
                         1,
                         predefined_hand,
                         discards,
-                        true,
+                        &settings.game_settings,
                     );
                     if user_state.game_state.is_none() {
                         return text_response("Given string doesn't represent a valid hand");
                     }
                 }
                 None => {
-                    user_state.game_state = Some(generate_normal_dealt_game(1, true));
+                    user_state.game_state =
+                        Some(generate_normal_dealt_game(1, &settings.game_settings));
                 }
             }
             return [start_game(user_state, &static_data)].to_vec();
@@ -231,6 +233,18 @@ Choose render size (smaller = faster):
                     ""
                 } else {
                     "not "
+                }
+            ));
+        }
+        Some("/toggle_honors") => {
+            settings.game_settings.include_honors = !settings.game_settings.include_honors;
+            user_state.settings_unsaved = true;
+            return text_response_str(format!(
+                "Using honors is now toggled {}",
+                if settings.game_settings.include_honors {
+                    "on"
+                } else {
+                    "off"
                 }
             ));
         }

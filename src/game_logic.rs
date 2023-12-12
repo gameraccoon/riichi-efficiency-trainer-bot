@@ -1,5 +1,6 @@
 use crate::rand::prelude::SliceRandom;
 use rand::thread_rng;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Suit {
@@ -31,6 +32,12 @@ pub struct Hand {
 pub const EMPTY_HAND: Hand = Hand {
     tiles: [EMPTY_TILE; 14],
 };
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GameSettings {
+    pub deal_first_tile: bool,
+    pub include_honors: bool,
+}
 
 // store tiles as cumulative frequency distribution (store count of every possible tile in a hand)
 pub type TileFrequencyTable = [u8; 37];
@@ -66,7 +73,7 @@ fn sort_hand(hand: &mut Hand) {
     }
 }
 
-fn populate_full_set() -> Vec<Tile> {
+fn populate_full_set(game_settings: &GameSettings) -> Vec<Tile> {
     let mut result = Vec::with_capacity((9 * 3 + 7) * 4);
 
     for i in 1..=9 {
@@ -96,20 +103,22 @@ fn populate_full_set() -> Vec<Tile> {
         }
     }
 
-    for i in 1..=7 {
-        for _j in 0..4 {
-            result.push(Tile {
-                suit: Suit::Special,
-                value: i,
-            });
+    if game_settings.include_honors {
+        for i in 1..=7 {
+            for _j in 0..4 {
+                result.push(Tile {
+                    suit: Suit::Special,
+                    value: i,
+                });
+            }
         }
     }
 
     return result;
 }
 
-pub fn generate_normal_dealt_game(player_count: u32, deal_first_tile: bool) -> GameState {
-    let mut tiles = populate_full_set();
+pub fn generate_normal_dealt_game(player_count: u32, game_settings: &GameSettings) -> GameState {
+    let mut tiles = populate_full_set(game_settings);
     tiles.shuffle(&mut thread_rng());
 
     let dead_wall: [Tile; 14] = tiles.split_off(tiles.len() - 14).try_into().unwrap();
@@ -137,7 +146,7 @@ pub fn generate_normal_dealt_game(player_count: u32, deal_first_tile: bool) -> G
         live_wall: tiles,
     };
 
-    if deal_first_tile {
+    if game_settings.deal_first_tile {
         draw_tile_to_hand(&mut game_state, 0);
     }
 
@@ -148,13 +157,13 @@ pub fn generate_dealt_game_with_hand_and_discards(
     player_count: u32,
     predefined_hand: Hand,
     predefined_discards: Vec<Tile>,
-    deal_first_tile: bool,
+    game_settings: &GameSettings,
 ) -> Option<GameState> {
     if predefined_hand.tiles[0] == EMPTY_TILE {
         return None;
     }
 
-    let mut tiles = populate_full_set();
+    let mut tiles = populate_full_set(game_settings);
 
     for tile in predefined_hand.tiles {
         if tile != EMPTY_TILE {
@@ -213,7 +222,7 @@ pub fn generate_dealt_game_with_hand_and_discards(
         live_wall: tiles,
     };
 
-    if game_state.hands[0].tiles[13] == EMPTY_TILE && deal_first_tile {
+    if game_state.hands[0].tiles[13] == EMPTY_TILE && game_settings.deal_first_tile {
         draw_tile_to_hand(&mut game_state, 0);
     }
 
