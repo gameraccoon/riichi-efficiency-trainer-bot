@@ -163,12 +163,31 @@ pub fn generate_dealt_game_with_hand_and_discards(
         return None;
     }
 
-    let mut tiles = populate_full_set(game_settings);
+    let game_settings = GameSettings {
+        deal_first_tile: game_settings.deal_first_tile,
+        include_honors: game_settings.include_honors
+            || predefined_hand
+                .tiles
+                .iter()
+                .position(|&t| t.suit == Suit::Special)
+                .is_some()
+            || predefined_discards
+                .iter()
+                .position(|&t| t.suit == Suit::Special)
+                .is_some(),
+    };
+
+    let mut tiles = populate_full_set(&game_settings);
 
     for tile in predefined_hand.tiles {
         if tile != EMPTY_TILE {
-            let index = tiles.iter().position(|&t| t == tile).unwrap();
-            tiles.remove(index);
+            let index_result = tiles.iter().position(|&t| t == tile);
+
+            tiles.remove(if index_result.is_some() {
+                index_result.unwrap()
+            } else {
+                return None;
+            });
         }
     }
 
