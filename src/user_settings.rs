@@ -16,7 +16,6 @@ pub fn get_default_settings() -> UserSettings {
         display_settings: DisplaySettings {
             terms_display: TermsDisplayOption::EnglishTerms,
             language_key: "ene".to_string(),
-            render_size: 1,
         },
         score_settings: ScoreCalculationSettings {
             allow_kokushi: true,

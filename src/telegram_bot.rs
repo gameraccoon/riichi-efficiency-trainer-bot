@@ -28,7 +28,7 @@ fn start_game(user_state: &mut UserState, static_data: &StaticData) -> Response 
     return single_image_response(
         render_game_state(
             &game_state,
-            &static_data.render_data.sizes[user_state.settings.display_settings.render_size],
+            &static_data.render_data,
         ),
         "Dealt new hand".to_string(),
     );
@@ -128,12 +128,7 @@ Choose terminology:
 Choose rules:
 /toggle_chiitoi - turn on/off counting for Chiitoitsu
 /toggle_kokushi - turn on/off counting for Kokushi musou
-/toggle_honors - turn on/off honor tiles (from the next game)
-
-Choose render size (smaller = faster):
-/render_small - small size
-/render_medium - medium size
-/render_large - large size";
+/toggle_honors - turn on/off honor tiles (from the next game)";
 
     let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
@@ -181,7 +176,7 @@ Choose render size (smaller = faster):
             return image_response(
                 render_game_state(
                     &game_state,
-                    &static_data.render_data.sizes[settings.display_settings.render_size],
+                    &static_data.render_data,
                 ),
                 format!("Tiles left: {}", game_state.live_wall.len()),
             );
@@ -192,7 +187,7 @@ Choose render size (smaller = faster):
                     render_move_explanation(
                         &previous_move,
                         &settings.score_settings,
-                        &static_data.render_data.sizes[settings.display_settings.render_size],
+                        &static_data.render_data,
                     ),
                     get_move_explanation_text(&previous_move, &settings),
                 ),
@@ -247,21 +242,6 @@ Choose render size (smaller = faster):
                     "off"
                 }
             ));
-        }
-        Some("/render_small") => {
-            settings.display_settings.render_size = 0;
-            user_state.settings_unsaved = true;
-            return text_response("Set render size to small");
-        }
-        Some("/render_medium") => {
-            settings.display_settings.render_size = 1;
-            user_state.settings_unsaved = true;
-            return text_response("Set render size to medium");
-        }
-        Some("/render_large") => {
-            settings.display_settings.render_size = 2;
-            user_state.settings_unsaved = true;
-            return text_response("Set render size to large");
         }
         Some("/info_score") => {
             return text_response("The bot uses ukeire2 as the score, \
@@ -432,7 +412,7 @@ Choose render size (smaller = faster):
     return image_response(
         render_game_state(
             &game_state,
-            &static_data.render_data.sizes[settings.display_settings.render_size],
+            &static_data.render_data,
         ),
         answer,
     );

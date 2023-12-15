@@ -150,14 +150,20 @@ fn render_dora_indicators_to_image(
     }
 }
 
-pub fn render_game_state(game: &GameState, render_data: &SizedImageData) -> ImageBuf {
+pub fn render_game_state(game: &GameState, render_data: &ImageRenderData) -> ImageBuf {
+    let total_width_tiles = 14;
+    let total_height_tiles = 10;
+
+    // choose middle size for game state as it seem to fit the best with the dimensions chosen above
+    let render_data = &render_data.sizes[1];
+
     let drawn_tile_gap = render_data.tile_width / 4;
     let top_offset = render_data.tile_height / 4;
-    let total_width = render_data.tile_width * 14 + drawn_tile_gap;
-    let total_height = render_data.tile_height * 10 + top_offset;
+    let total_width = render_data.tile_width * total_width_tiles + drawn_tile_gap;
+    let total_height = render_data.tile_height * total_height_tiles + top_offset;
 
     let mut img = ImageBuffer::from_pixel(total_width, total_height, render_data.bg_color);
-    let middle_x = (render_data.tile_width * 14 + drawn_tile_gap) / 2;
+    let middle_x = (render_data.tile_width * total_width_tiles + drawn_tile_gap) / 2;
 
     render_hand_to_image(
         &mut img,
@@ -233,15 +239,13 @@ fn render_explanation_line_to_image(
 pub fn render_move_explanation(
     previous_move: &PreviousMoveData,
     score_settings: &ScoreCalculationSettings,
-    render_data: &SizedImageData,
+    render_data: &ImageRenderData,
 ) -> ImageBuf {
     assert!(
         previous_move.game_state.hands[previous_move.hand_index].tiles[13] != EMPTY_TILE,
         "Expected move state hand have 14 tiles before the discard"
     );
 
-    let horizontal_gap = render_data.tile_width / 4;
-    let vertical_gap = render_data.tile_height / 4;
     let mut visible_tiles = get_visible_tiles(&previous_move.game_state, previous_move.hand_index);
     let best_discards = calculate_best_discards_ukeire2(
         &previous_move.game_state.hands[previous_move.hand_index].tiles,
@@ -261,9 +265,36 @@ pub fn render_move_explanation(
         }
     }
 
+    let total_width_tiles = total_improvements.len() as u32 + 1;
+    let total_height_tiles = best_discards.len() as u32;
+
+    let min_approximation = f32::min(
+        (total_width_tiles * render_data.sizes[0].tile_width) as f32,
+        (total_height_tiles * render_data.sizes[0].tile_height) as f32,
+    );
+    let max_approximation = f32::max(
+        (total_width_tiles * render_data.sizes[0].tile_width) as f32,
+        (total_height_tiles * render_data.sizes[0].tile_height) as f32,
+    );
+
+    // calculate the best fitting tile size based on amount of tiles
+    // the more tiles the worse the quality will be
+    // the values are chosen based on manual testing
+    let size_idx = if min_approximation < 150.0 && max_approximation < 250.0 {
+        2
+    } else if min_approximation < 300.0 && max_approximation < 500.0 {
+        1
+    } else {
+        0
+    };
+    let render_data = &render_data.sizes[size_idx];
+
+    let horizontal_gap = render_data.tile_width / 4;
+    let vertical_gap = render_data.tile_height / 4;
+
     let mut img = ImageBuffer::from_pixel(
-        horizontal_gap * 3 + (total_improvements.len() as u32 + 1) * render_data.tile_width,
-        vertical_gap + best_discards.len() as u32 * (render_data.tile_height + vertical_gap),
+        horizontal_gap * 3 + total_width_tiles * render_data.tile_width,
+        vertical_gap + total_height_tiles * (render_data.tile_height + vertical_gap),
         render_data.bg_color,
     );
 

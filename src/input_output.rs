@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 pub struct DisplaySettings {
     pub terms_display: TermsDisplayOption,
     pub language_key: String,
-    pub render_size: usize,
 }
 
 const TILE_ENGLISH: [&str; 37] = [
