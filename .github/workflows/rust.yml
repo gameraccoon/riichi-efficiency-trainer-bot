@@ -24,8 +24,8 @@ jobs:
     - name: Run tests
       run: cargo test --release --verbose
 
-    - name: Upload linux artifacts
+    - name: Upload Linux artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: Linux (Ubuntu)
+        name: riichi-efficiency-trainer-Linux
         path: target/release/riichi-trainer
