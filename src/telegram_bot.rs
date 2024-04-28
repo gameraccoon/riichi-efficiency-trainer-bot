@@ -497,15 +497,19 @@ pub async fn run_telegram_bot() {
                 user_state.settings_unsaved = false;
             }
             for response in responses {
-                if response.image.is_none() {
-                    bot.send_message(message.chat.id, response.text).await?;
-                } else {
+                let send_result = if let Some(image) = response.image {
                     let text = response.text;
-                    let mut send_photo = bot.send_photo(message.chat.id, response.image.unwrap());
+                    let mut send_photo = bot.send_photo(message.chat.id, image);
                     if !text.is_empty() {
                         send_photo.caption = Some(text);
                     }
-                    send_photo.send().await.expect("Failed to send request");
+                    send_photo.send().await
+                } else {
+                    bot.send_message(message.chat.id, response.text).await
+                };
+
+                if send_result.is_err() {
+                    log::error!("Failed to send photo: {:?}", send_result.err());
                 }
             }
             respond(())

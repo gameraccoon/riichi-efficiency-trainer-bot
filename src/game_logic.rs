@@ -223,10 +223,12 @@ pub fn generate_dealt_game_with_hand_and_discards(
             let tile = predefined_discards[i];
             if tile != EMPTY_TILE {
                 // find first tile in tiles
-                let index = tiles.iter().position(|&t| t == tile).unwrap();
-                tiles.remove(index);
-                discards[player_index].push(tile);
-                player_index = (player_index + 1) % player_count as usize;
+                let index_result = tiles.iter().position(|&t| t == tile);
+                if let Some(index) = index_result {
+                    tiles.remove(index);
+                    discards[player_index].push(tile);
+                    player_index = (player_index + 1) % player_count as usize;
+                }
             }
         }
     }
