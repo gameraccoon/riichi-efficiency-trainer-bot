@@ -1,4 +1,3 @@
-use dashmap::DashMap;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
@@ -13,6 +12,8 @@ use crate::translations::*;
 use crate::ukeire_calculator::*;
 use crate::user_settings::*;
 use crate::user_state::*;
+
+static USER_STATES_PATH: &str = "./data/user_states.json";
 
 fn read_telegram_token() -> String {
     return fs::read_to_string("./telegramApiToken.txt")
@@ -472,76 +473,6 @@ fn load_translations() -> Translations {
     return translations;
 }
 
-fn load_user_states(file_path: &str) -> DashMap<ChatId, UserState> {
-    return if Path::new(file_path).exists() {
-        let data = fs::read_to_string(file_path).expect("Can't open file");
-        serde_json::from_str(&data).expect("Can't parse user states file")
-    } else {
-        DashMap::new()
-    };
-}
-
-fn save_user_state(file_path: &str, chat_id: ChatId, user_state: &UserState) {
-    let parent_dir = Path::new(file_path).parent();
-    let parent_dir = match parent_dir {
-        Some(parent_dir) => parent_dir,
-        None => {
-            eprintln!(
-                "Can't get parent directory for user states file: {:?}",
-                file_path
-            );
-            return;
-        }
-    };
-
-    let create_dir_result = fs::create_dir_all(parent_dir);
-    if create_dir_result.is_err() {
-        eprintln!(
-            "Failed to create directory for user states file: {:?}",
-            create_dir_result.err()
-        );
-        return;
-    }
-    let mut hash_map: HashMap<ChatId, UserSettings>;
-    if Path::new(file_path).exists() {
-        let read_result = fs::read_to_string(file_path);
-        let data = match read_result {
-            Ok(data) => data,
-            Err(err) => {
-                eprintln!("Can't open file for reading: {:?}", err);
-                return;
-            }
-        };
-        let write_result = serde_json::from_str(&data);
-        match write_result {
-            Ok(write_result) => {
-                hash_map = write_result;
-            }
-            Err(err) => {
-                eprintln!("Can't parse user states file: {:?}", err);
-                return;
-            }
-        }
-    } else {
-        hash_map = HashMap::new();
-    }
-
-    hash_map.insert(chat_id, user_state.settings.clone());
-
-    let serialize_result = serde_json::to_string(&hash_map);
-    let data = match serialize_result {
-        Ok(data) => data,
-        Err(err) => {
-            eprintln!("Can't serialize user data: {:?}", err);
-            return;
-        }
-    };
-    let write_result = fs::write(file_path, data);
-    if let Err(err) = write_result {
-        eprintln!("Can't write to file: {:?}", err);
-    }
-}
-
 pub async fn run_telegram_bot() {
     pretty_env_logger::init();
     log::info!("Starting the bot");
@@ -550,11 +481,11 @@ pub async fn run_telegram_bot() {
 
     let bot = Bot::new(token);
 
-    type UserStates = DashMap<ChatId, UserState>;
     type SharedUserStates = Arc<UserStates>;
     type SharedStaticData = Arc<StaticData>;
 
-    let user_states = SharedUserStates::new(load_user_states("./data/user_states.json"));
+    let user_states =
+        SharedUserStates::new(read_user_states_from_file(Path::new(USER_STATES_PATH)));
     let static_data = SharedStaticData::new(StaticData {
         translations: load_translations(),
         render_data: load_static_render_data(),
@@ -566,12 +497,13 @@ pub async fn run_telegram_bot() {
          static_data: SharedStaticData,
          message: Message| async move {
             let user_state: &mut UserState = &mut user_states
+                .states
                 .entry(message.chat.id)
                 .or_insert_with(|| get_default_user_state());
 
             let responses = process_user_message(user_state, &message, &static_data);
             if user_state.settings_unsaved {
-                save_user_state("./data/user_states.json", message.chat.id, &user_state);
+                save_single_user_state(Path::new(USER_STATES_PATH), message.chat.id, &user_state);
                 user_state.settings_unsaved = false;
             }
             for response in responses {

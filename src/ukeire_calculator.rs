@@ -649,6 +649,7 @@ pub fn convert_frequency_table_to_flat_vec(frequency_table: &TileFrequencyTable)
     return result;
 }
 
+#[derive(Clone)]
 pub struct PreviousMoveData {
     pub game_state: GameState,
     pub hand_index: usize,
