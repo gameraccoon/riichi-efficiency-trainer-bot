@@ -684,7 +684,7 @@ mod tests {
 
     #[test]
     fn test_example_hand_one_shanten() {
-        let hand = input_output::make_hand_from_string("123456789m1334p");
+        let hand = input_output::make_hand_from_string("123456789m1334p").unwrap();
         let calculator = calculate_shanten(
             &hand.tiles[0..13],
             &ScoreCalculationSettings {
@@ -695,13 +695,13 @@ mod tests {
         assert_eq!(calculator.get_calculated_shanten(), 1);
         assert_eq!(
             convert_frequency_table_to_flat_vec(&calculator.best_waits),
-            input_output::make_tile_sequence_from_string("123456p")
+            input_output::make_tile_sequence_from_string("123456p").unwrap()
         );
     }
 
     #[test]
     fn test_example_hand_two_shanten() {
-        let hand = input_output::make_hand_from_string("122456789m1369p");
+        let hand = input_output::make_hand_from_string("122456789m1369p").unwrap();
         let calculator = calculate_shanten(
             &hand.tiles[0..13],
             &ScoreCalculationSettings {
@@ -712,7 +712,7 @@ mod tests {
         assert_eq!(calculator.get_calculated_shanten(), 2);
         assert_eq!(
             convert_frequency_table_to_flat_vec(&calculator.best_waits),
-            input_output::make_tile_sequence_from_string("1234m2456789p")
+            input_output::make_tile_sequence_from_string("1234m2456789p").unwrap()
         );
     }
 }
