@@ -75,22 +75,26 @@ fn render_hand_to_image(
 ) {
     for i in 0..13 {
         let tile_sprite_view = get_tile_image(&hand.tiles[i], &render_data);
-        img.copy_from(
+        let copy_result = img.copy_from(
             &tile_sprite_view.to_image(),
             x + render_data.tile_width * i as u32,
             y,
-        )
-        .unwrap();
+        );
+        if let Err(e) = copy_result {
+            eprintln!("Error rendering tile in hand: {}", e);
+        }
     }
 
     if hand.tiles[13] != EMPTY_TILE {
         let tile_sprite_view = get_tile_image(&hand.tiles[13], &render_data);
-        img.copy_from(
+        let copy_result = img.copy_from(
             &tile_sprite_view.to_image(),
             x + render_data.tile_width * 13 + drawn_tile_gap,
             y,
-        )
-        .unwrap();
+        );
+        if let Err(e) = copy_result {
+            eprintln!("Error rendering drawn tile in hand: {}", e);
+        }
     }
 }
 
@@ -106,12 +110,14 @@ fn render_discards_to_image(
     let mut pos_y = 0;
     for tile in tiles {
         let tile_sprite_view = get_tile_image(&tile, &render_data);
-        img.copy_from(
+        let copy_result = img.copy_from(
             &tile_sprite_view.to_image(),
             x + pos_x * render_data.tile_width,
             y + pos_y * render_data.tile_height,
-        )
-        .unwrap();
+        );
+        if let Err(e) = copy_result {
+            eprintln!("Error rendering discard tile: {}", e);
+        }
         pos_x += 1;
         if pos_x >= width {
             pos_y += 1;
@@ -130,23 +136,27 @@ fn render_dora_indicators_to_image(
     for i in 0..7 {
         if i != 4 {
             let tile_sprite_view = get_back_side_image(&render_data);
-            img.copy_from(
+            let copy_result = img.copy_from(
                 &tile_sprite_view.to_image(),
                 x + i * render_data.tile_width,
                 y,
-            )
-            .unwrap();
+            );
+            if let Err(e) = copy_result {
+                eprintln!("Error rendering dora indicator: {}", e);
+            }
         }
     }
 
     {
         let tile_sprite_view = get_tile_image(&dora_indicators[0], &render_data);
-        img.copy_from(
+        let copy_result = img.copy_from(
             &tile_sprite_view.to_image(),
             x + 4 * render_data.tile_width,
             y,
-        )
-        .unwrap();
+        );
+        if let Err(e) = copy_result {
+            eprintln!("Error rendering dora indicator: {}", e);
+        }
     }
 }
 
@@ -215,19 +225,24 @@ fn render_explanation_line_to_image(
 ) {
     {
         let tile_sprite_view = get_tile_image(&discard, &render_data);
-        img.copy_from(&tile_sprite_view.to_image(), x, y).unwrap();
+        let copy_result = img.copy_from(&tile_sprite_view.to_image(), x, y);
+        if let Err(e) = copy_result {
+            eprintln!("Error rendering first tile in explanation line: {}", e);
+        }
     }
 
     let mut local_i = 0;
     for i in 0..total_improvements.len() {
         if total_improvements[i] == improvements[local_i] {
             let tile_sprite_view = get_tile_image(&improvements[local_i], &render_data);
-            img.copy_from(
+            let copy_result = img.copy_from(
                 &tile_sprite_view.to_image(),
                 x + gap_after_discard + (i as u32 + 1) * render_data.tile_width,
                 y,
-            )
-            .unwrap();
+            );
+            if let Err(e) = copy_result {
+                eprintln!("Error rendering tile in explanation line: {}", e);
+            }
             local_i += 1;
             if local_i == improvements.len() {
                 break;

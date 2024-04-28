@@ -85,7 +85,13 @@ pub enum TermsDisplayOption {
 }
 
 pub fn get_capitalized(string: &str) -> String {
-    string.chars().nth(0).unwrap().to_uppercase().to_string() + &string[1..]
+    string
+        .chars()
+        .nth(0)
+        .unwrap_or(' ')
+        .to_uppercase()
+        .to_string()
+        + &string[1..]
 }
 
 pub fn get_printable_tiles_set_text(tiles: &[Tile], terms_display: TermsDisplayOption) -> String {
@@ -286,20 +292,18 @@ pub fn get_tile_from_input(input: &str) -> Tile {
     ]);
 
     if input.len() == 2 {
-        let suit = get_suit_from_letter(input.chars().nth(1).unwrap());
-        if suit.is_none() {
+        let suit = get_suit_from_letter(input.chars().nth(1).unwrap_or(' '));
+        let Some(suit) = suit else {
             return EMPTY_TILE;
-        }
-
-        let value: u8 = input[0..1].parse().unwrap_or(255);
-        if value == 255 {
-            return EMPTY_TILE;
-        }
-
-        return Tile {
-            suit: suit.unwrap(),
-            value: value,
         };
+
+        let parse_result = input[0..1].parse();
+        let value: u8 = match parse_result {
+            Ok(value) => value,
+            Err(_) => return EMPTY_TILE,
+        };
+
+        return Tile { suit, value };
     } else if input.contains(" ") {
         let mut parts = Vec::with_capacity(2);
         let mut count = 0;
@@ -339,62 +343,67 @@ pub fn get_tile_from_input(input: &str) -> Tile {
     };
 }
 
-pub fn make_hand_from_string(hand_string: &str) -> Hand {
+pub fn make_hand_from_string(hand_string: &str) -> Result<Hand, String> {
     if hand_string.is_empty() {
-        return EMPTY_HAND;
+        return Err("Empty hand".to_string());
     }
 
     // we can't have a valid hand less than 13 tiles + suit letter
     if hand_string.len() < 14 {
-        return EMPTY_HAND;
+        return Err("Invalid number of tiles".to_string());
     }
 
     let tiles_count = hand_string.chars().filter(|c| c.is_numeric()).count();
     if tiles_count < 13 || tiles_count > 14 {
-        return EMPTY_HAND;
+        return Err("Invalid number of tiles".to_string());
     }
 
     let mut hand: Hand = EMPTY_HAND;
     let mut current_suit: Option<Suit> = None;
     let mut tile_position = tiles_count;
     for i in (0..hand_string.len()).rev() {
-        let letter = hand_string.chars().nth(i).unwrap();
+        let Some(letter) = hand_string.chars().nth(i) else {
+            return Err("Invalid character".to_string());
+        };
         let value = letter.to_string().parse().unwrap_or(0);
         if value > 0 {
-            if current_suit.is_none() {
-                return EMPTY_HAND;
-            }
+            let Some(current_suit) = current_suit else {
+                return Err("Invalid or not specified suit letter".to_string());
+            };
             tile_position -= 1;
-            hand.tiles[tile_position].suit = current_suit.unwrap();
+            hand.tiles[tile_position].suit = current_suit;
             hand.tiles[tile_position].value = value;
         } else {
             current_suit = get_suit_from_letter(letter);
         }
     }
-    return hand;
+    return Ok(hand);
 }
 
-pub fn make_tile_sequence_from_string(tile_string: &str) -> Vec<Tile> {
+pub fn make_tile_sequence_from_string(tile_string: &str) -> Result<Vec<Tile>, String> {
     let mut result = Vec::new();
 
     let mut current_suit: Option<Suit> = None;
     for i in (0..tile_string.len()).rev() {
-        let letter = tile_string.chars().nth(i).unwrap();
+        let Some(letter) = tile_string.chars().nth(i) else {
+            return Err("Invalid character".to_string());
+        };
         let value = letter.to_string().parse().unwrap_or(0);
         if value > 0 {
-            if current_suit.is_none() {
-                return Vec::new();
-            }
-            result.push(Tile {
-                suit: current_suit.unwrap(),
-                value,
-            });
+            let Some(suit) = current_suit else {
+                return Err("Invalid or not specified suit letter".to_string());
+            };
+            result.push(Tile { suit, value });
         } else {
             current_suit = get_suit_from_letter(letter);
         }
     }
 
+    if result.is_empty() {
+        return Err("No valid tiles found".to_string());
+    }
+
     result.reverse();
 
-    return result;
+    return Ok(result);
 }

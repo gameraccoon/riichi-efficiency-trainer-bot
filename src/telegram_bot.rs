@@ -20,16 +20,19 @@ fn read_telegram_token() -> String {
 }
 
 fn start_game(user_state: &mut UserState, static_data: &StaticData) -> Response {
-    let game_state = &user_state.game_state.as_ref().unwrap();
+    let Some(game_state) = &user_state.game_state else {
+        eprintln!("No game state when trying to start a game");
+        return single_text_response(
+            "No hand is in progress, send /start to start a new hand".to_string(),
+        );
+    };
+
     user_state.current_score = 0;
     user_state.best_score = 0;
     user_state.efficiency_sum = 0.0;
     user_state.moves = 0;
     return single_image_response(
-        render_game_state(
-            &game_state,
-            &static_data.render_data,
-        ),
+        render_game_state(&game_state, &static_data.render_data),
         "Dealt new hand".to_string(),
     );
 }
@@ -105,6 +108,10 @@ fn single_image_response(img: ImageBuf, text: String) -> Response {
     };
 }
 
+fn single_text_response(text: String) -> Response {
+    Response { text, image: None }
+}
+
 fn image_response(img: ImageBuf, text: String) -> Vec<Response> {
     return [single_image_response(img, text)].to_vec();
 }
@@ -114,9 +121,9 @@ fn process_user_message(
     message: &Message,
     static_data: &StaticData,
 ) -> Vec<Response> {
-    if message.text().is_none() {
+    let Some(message_text) = &message.text() else {
         return text_response("No message received");
-    }
+    };
 
     const NO_HAND_IN_PROGRESS_MESSAGE: &str =
         "No hand is in progress, send /start to start a new hand";
@@ -129,8 +136,6 @@ Choose rules:
 /toggle_chiitoi - turn on/off counting for Chiitoitsu
 /toggle_kokushi - turn on/off counting for Kokushi musou
 /toggle_honors - turn on/off honor tiles (from the next game)";
-
-    let message_text = &message.text().unwrap();
     let mut answer: String = String::new();
     let settings = &mut user_state.settings;
     let mut message_split = message_text.split_whitespace();
@@ -147,37 +152,67 @@ Choose rules:
                     };
 
                     let predefined_hand = make_hand_from_string(&hand_string);
+                    let predefined_hand = match predefined_hand {
+                        Ok(hand) => hand,
+                        Err(err) => {
+                            return text_response(&format!(
+                                "Given string doesn't represent a valid hand: {}",
+                                err
+                            ));
+                        }
+                    };
                     let discards = match discards_msg {
-                        Some(discards_string) => make_tile_sequence_from_string(&discards_string),
+                        Some(discards_string) => {
+                            let make_sequence_result =
+                                make_tile_sequence_from_string(&discards_string);
+                            match make_sequence_result {
+                                Ok(sequence) => sequence,
+                                Err(err) => {
+                                    return text_response(&format!(
+                                        "Discard has invalid format: {}",
+                                        err
+                                    ));
+                                }
+                            }
+                        }
                         None => Vec::new(),
                     };
-                    user_state.game_state = generate_dealt_game_with_hand_and_discards(
+
+                    let generate_game_result = generate_dealt_game_with_hand_and_discards(
                         1,
                         predefined_hand,
                         discards,
                         &settings.game_settings,
                     );
+                    match generate_game_result {
+                        Ok(game_state) => user_state.game_state = Some(game_state),
+                        Err(err) => {
+                            return text_response(&format!(
+                                "Can't generate game with this input: {}",
+                                err
+                            ));
+                        }
+                    }
                     if user_state.game_state.is_none() {
                         return text_response("Given string doesn't represent a valid hand");
                     }
                 }
-                None => {
-                    user_state.game_state =
-                        Some(generate_normal_dealt_game(1, &settings.game_settings));
-                }
+                None => match generate_normal_dealt_game(1, &settings.game_settings) {
+                    Ok(game_state) => user_state.game_state = Some(game_state),
+                    Err(err) => {
+                        eprintln!("Failed to generate a new hand: {}", err);
+                        return text_response("Failed to generate a new hand. Try again");
+                    }
+                },
             }
             return [start_game(user_state, &static_data)].to_vec();
         }
         Some("/table") => {
-            if user_state.game_state.is_none() {
+            let Some(game_state) = &user_state.game_state else {
                 return text_response(NO_HAND_IN_PROGRESS_MESSAGE);
-            }
-            let game_state = &user_state.game_state.as_ref().unwrap();
+            };
             return image_response(
-                render_game_state(
-                    &game_state,
-                    &static_data.render_data,
-                ),
+                render_game_state(&game_state, &static_data.render_data),
                 format!("Tiles left: {}", game_state.live_wall.len()),
             );
         }
@@ -255,11 +290,9 @@ Choose rules:
         None => {}
     }
 
-    if user_state.game_state.is_none() {
+    let Some(mut game_state) = user_state.game_state.as_mut() else {
         return text_response(NO_HAND_IN_PROGRESS_MESSAGE);
-    }
-
-    let mut game_state = user_state.game_state.as_mut().unwrap();
+    };
 
     let requested_tile = get_tile_from_input(&message_text.to_lowercase());
     if requested_tile == EMPTY_TILE {
@@ -299,7 +332,11 @@ Choose rules:
             user_state.efficiency_sum +=
                 current_discard_score as f32 / best_discard_scores.score as f32;
             user_state.moves += 1;
-            user_state.previous_move.as_mut().unwrap().discarded_tile = tile;
+            if let Some(previous_move) = &mut user_state.previous_move {
+                previous_move.discarded_tile = tile;
+            } else {
+                eprintln!("No previous move when trying to set discarded tile");
+            }
 
             let shanten_calculator =
                 calculate_shanten(&game_state.hands[0].tiles[0..13], &settings.score_settings);
@@ -410,10 +447,7 @@ Choose rules:
     }
 
     return image_response(
-        render_game_state(
-            &game_state,
-            &static_data.render_data,
-        ),
+        render_game_state(&game_state, &static_data.render_data),
         answer,
     );
 }
@@ -448,20 +482,64 @@ fn load_user_states(file_path: &str) -> DashMap<ChatId, UserState> {
 }
 
 fn save_user_state(file_path: &str, chat_id: ChatId, user_state: &UserState) {
-    fs::create_dir_all(Path::new(file_path).parent().unwrap())
-        .expect("The directory can't be created");
+    let parent_dir = Path::new(file_path).parent();
+    let parent_dir = match parent_dir {
+        Some(parent_dir) => parent_dir,
+        None => {
+            eprintln!(
+                "Can't get parent directory for user states file: {:?}",
+                file_path
+            );
+            return;
+        }
+    };
+
+    let create_dir_result = fs::create_dir_all(parent_dir);
+    if create_dir_result.is_err() {
+        eprintln!(
+            "Failed to create directory for user states file: {:?}",
+            create_dir_result.err()
+        );
+        return;
+    }
     let mut hash_map: HashMap<ChatId, UserSettings>;
     if Path::new(file_path).exists() {
-        let data = fs::read_to_string(file_path).expect("Can't open file");
-        hash_map = serde_json::from_str(&data).expect("Can't parse user states file");
+        let read_result = fs::read_to_string(file_path);
+        let data = match read_result {
+            Ok(data) => data,
+            Err(err) => {
+                eprintln!("Can't open file for reading: {:?}", err);
+                return;
+            }
+        };
+        let write_result = serde_json::from_str(&data);
+        match write_result {
+            Ok(write_result) => {
+                hash_map = write_result;
+            }
+            Err(err) => {
+                eprintln!("Can't parse user states file: {:?}", err);
+                return;
+            }
+        }
     } else {
         hash_map = HashMap::new();
     }
 
     hash_map.insert(chat_id, user_state.settings.clone());
 
-    let data = serde_json::to_string(&hash_map).expect("Can't serialize user data");
-    fs::write(file_path, data).expect("Can't write to file");
+    let serialize_result = serde_json::to_string(&hash_map);
+    let data = match serialize_result {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("Can't serialize user data: {:?}", err);
+            return;
+        }
+    };
+    let write_result = fs::write(file_path, data);
+    if let Err(err) = write_result {
+        eprintln!("Can't write to file: {:?}", err);
+    }
 }
 
 pub async fn run_telegram_bot() {

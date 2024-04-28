@@ -117,20 +117,30 @@ fn populate_full_set(game_settings: &GameSettings) -> Vec<Tile> {
     return result;
 }
 
-pub fn generate_normal_dealt_game(player_count: u32, game_settings: &GameSettings) -> GameState {
+pub fn generate_normal_dealt_game(
+    player_count: u32,
+    game_settings: &GameSettings,
+) -> Result<GameState, String> {
     let mut tiles = populate_full_set(game_settings);
     tiles.shuffle(&mut thread_rng());
 
-    let dead_wall: [Tile; 14] = tiles.split_off(tiles.len() - 14).try_into().unwrap();
+    let dead_wall: [Tile; 14] = tiles
+        .split_off(tiles.len() - 14)
+        .try_into()
+        .map_err(|_| "Incorrect number of tiles")?;
     // 1-3 - dora indicators, 4-7 - uradora indicators
-    let dora_indicators: [Tile; 8] = dead_wall[4..12].try_into().unwrap();
+    let dora_indicators: [Tile; 8] = dead_wall[4..12]
+        .try_into()
+        .map_err(|_| "Incorrect number of tiles")?;
 
     let mut hands = Vec::with_capacity(player_count as usize);
     let mut discards = Vec::with_capacity(player_count as usize);
     for i in 0..player_count {
         let new_tiles = [tiles.split_off(tiles.len() - 13), [EMPTY_TILE].to_vec()].concat();
         hands.push(Hand {
-            tiles: new_tiles.try_into().unwrap(),
+            tiles: new_tiles
+                .try_into()
+                .map_err(|_| "Incorrect number of tiles")?,
         });
         sort_hand(&mut hands[i as usize]);
         discards.push(Vec::new());
@@ -150,7 +160,7 @@ pub fn generate_normal_dealt_game(player_count: u32, game_settings: &GameSetting
         draw_tile_to_hand(&mut game_state, 0);
     }
 
-    return game_state;
+    return Ok(game_state);
 }
 
 pub fn generate_dealt_game_with_hand_and_discards(
@@ -158,9 +168,9 @@ pub fn generate_dealt_game_with_hand_and_discards(
     predefined_hand: Hand,
     predefined_discards: Vec<Tile>,
     game_settings: &GameSettings,
-) -> Option<GameState> {
+) -> Result<GameState, String> {
     if predefined_hand.tiles[0] == EMPTY_TILE {
-        return None;
+        return Err("Incorrect hand".to_string());
     }
 
     let game_settings = GameSettings {
@@ -183,24 +193,27 @@ pub fn generate_dealt_game_with_hand_and_discards(
         if tile != EMPTY_TILE {
             let index_result = tiles.iter().position(|&t| t == tile);
 
-            tiles.remove(if index_result.is_some() {
-                index_result.unwrap()
-            } else {
-                return None;
-            });
+            if let Some(index) = index_result {
+                tiles.remove(index);
+            };
         }
     }
 
     tiles.shuffle(&mut thread_rng());
 
-    let mut dead_wall: [Tile; 14] = tiles.split_off(tiles.len() - 14).try_into().unwrap();
+    let mut dead_wall: [Tile; 14] = tiles
+        .split_off(tiles.len() - 14)
+        .try_into()
+        .map_err(|_| "Incorrect number of tiles left to form dead wall")?;
 
     if predefined_discards.len() > 0 && predefined_discards[0] != EMPTY_TILE {
         dead_wall[4] = predefined_discards[0];
     }
 
     // 1-3 - dora indicators, 4-7 - uradora indicators
-    let dora_indicators: [Tile; 8] = dead_wall[4..12].try_into().unwrap();
+    let dora_indicators: [Tile; 8] = dead_wall[4..12]
+        .try_into()
+        .map_err(|_| "Incorrect number of tiles in dead wall")?;
 
     let mut hands = Vec::with_capacity(player_count as usize);
     let mut discards = Vec::with_capacity(player_count as usize);
@@ -211,7 +224,9 @@ pub fn generate_dealt_game_with_hand_and_discards(
     for i in 1..player_count {
         let new_tiles = [tiles.split_off(tiles.len() - 13), [EMPTY_TILE].to_vec()].concat();
         hands.push(Hand {
-            tiles: new_tiles.try_into().unwrap(),
+            tiles: new_tiles
+                .try_into()
+                .map_err(|_| "Incorrect number of tiles left to form player hand")?,
         });
         sort_hand(&mut hands[i as usize]);
         discards.push(Vec::new());
@@ -247,7 +262,7 @@ pub fn generate_dealt_game_with_hand_and_discards(
         draw_tile_to_hand(&mut game_state, 0);
     }
 
-    return Some(game_state);
+    return Ok(game_state);
 }
 
 pub fn make_frequency_table(tiles: &[Tile]) -> TileFrequencyTable {

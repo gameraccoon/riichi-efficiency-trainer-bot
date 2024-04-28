@@ -9,9 +9,7 @@ mod user_state;
 
 extern crate rand;
 
-use crate::telegram_bot::run_telegram_bot;
-
 #[tokio::main]
 async fn main() {
-    run_telegram_bot().await;
+    telegram_bot::run_telegram_bot().await;
 }

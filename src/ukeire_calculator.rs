@@ -2,7 +2,7 @@ use crate::game_logic::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 
-// only for tests
+#[cfg(test)]
 use crate::input_output;
 
 #[derive(Clone, Serialize, Deserialize)]
